@@ -184,7 +184,7 @@ func BenchmarkManyDifferentSensors(t *testing.B) {
 	for i := 0; i < 1000; i++ {
 		bucket := "count" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := int64(r.Uint32() % 1000)
+			a := float64(r.Uint32() % 1000)
 			counters[bucket] = a
 		}
 	}

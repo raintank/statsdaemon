@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/stvp/go-toml-config"
 )
 
 const (
@@ -62,22 +64,23 @@ func (a *Percentiles) String() string {
 }
 
 var (
-	serviceAddress   = flag.String("address", ":8125", "UDP service address")
-	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
-	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
-	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
-	showVersion      = flag.Bool("version", false, "print version string")
-	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-interval's to persist count keys")
-	percentThreshold = Percentiles{}
-)
+	listen_addr          = config.String("listen_addr", ":8125")
+	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
+	flushInterval        = config.Int("flush_interval", 10)
+	prefix_rates         = config.String("prefix_rates", "stats.")
+	prefix_timers        = config.String("prefix_timers", "stats.timers.")
+	prefix_gauges        = config.String("prefix_gauges", "stats.gauges.")
+	percentile_tresholds = config.String("percentile_tresholds", "")
+	percentThreshold     = Percentiles{}
 
-func init() {
-	flag.Var(&percentThreshold, "percent-threshold", "Threshold percent (0-100, may be given multiple times)")
-}
+	debug       = flag.Bool("debug", false, "print statistics sent to graphite")
+	showVersion = flag.Bool("version", false, "print version string")
+	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
+)
 
 var (
 	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	counters = make(map[string]int64)
+	counters = make(map[string]float64)
 	gauges   = make(map[string]uint64)
 	timers   = make(map[string]Uint64Slice)
 )
@@ -112,7 +115,7 @@ func monitor() {
 				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
-				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
+				counters[s.Bucket] += float64(s.Value.(int64)) * float64(1/s.Sampling)
 			}
 		}
 	}
@@ -124,7 +127,7 @@ func submit(deadline time.Time) error {
 
 	now := time.Now().Unix()
 
-	client, err := net.Dial("tcp", *graphiteAddress)
+	client, err := net.Dial("tcp", *graphite_addr)
 	if err != nil {
 		if *debug {
 			log.Printf("WARNING: resetting counters when in debug mode")
@@ -132,7 +135,7 @@ func submit(deadline time.Time) error {
 			processGauges(&buffer, now)
 			processTimers(&buffer, now, percentThreshold)
 		}
-		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphiteAddress, err)
+		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err)
 		return errors.New(errmsg)
 	}
 	defer client.Close()
@@ -165,32 +168,21 @@ func submit(deadline time.Time) error {
 		return errors.New(errmsg)
 	}
 
-	log.Printf("sent %d stats to %s", num, *graphiteAddress)
+	log.Printf("sent %d stats to %s", num, *graphite_addr)
 
 	return nil
 }
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
-	// continue sending zeros for counters for a short period of time even if we have no new data
-	// note we use the same in-memory value to denote both the actual value of the counter (value >= 0)
-	// as well as how many turns to keep the counter for (value < 0)
-	// for more context see https://github.com/bitly/statsdaemon/pull/8
 	for s, c := range counters {
-		switch {
-		case c <= *persistCountKeys:
-			// consider this purgable
-			delete(counters, s)
-			continue
-		case c < 0:
-			counters[s] -= 1
-			fmt.Fprintf(buffer, "%s %d %d\n", s, 0, now)
-		case c >= 0:
-			counters[s] = -1
-			fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
-		}
+		counters[s] = -1
+		v := c / float64(*flushInterval)
+		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_rates, s, v, now)
 		num++
+		delete(counters, s)
 	}
+	//counters = make(map[string]float64) this should be better than deleting every single entry
 	return num
 }
 
@@ -200,7 +192,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		if c == math.MaxUint64 {
 			continue
 		}
-		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
+		fmt.Fprintf(buffer, "%s%s %d %d\n", *prefix_gauges, g, c, now)
 		gauges[g] = math.MaxUint64
 		num++
 	}
@@ -208,22 +200,61 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 }
 
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
+	// these are the metrics that get exposed:
+	// count  estimate of original amount, by dividing received by samplerate
+	// count_ps  same, per second
+	// lower
+	// mean  // arithmetic mean
+	// mean_<pct> // arithmetic mean of values below <pct> percentile
+	// median
+	// std  standard deviation
+	// sum
+	// sum_90
+	// upper
+	// upper_90 / lower_90
+
+	// internal vars:
+	// seen -> len(t), i.e. real values seen.
+
 	var num int64
 	for u, t := range timers {
 		if len(t) > 0 {
+			seen := len(t)
 			num++
 
 			sort.Sort(t)
 			min := t[0]
 			max := t[len(t)-1]
-			maxAtThreshold := max
 			count := len(t)
+			count_ps := int64(count) / int64(*flushInterval)
 
 			sum := uint64(0)
 			for _, value := range t {
 				sum += value
 			}
 			mean := float64(sum) / float64(len(t))
+			sumOfDiffs := float64(0)
+			for _, value := range t {
+				sumOfDiffs += math.Pow((float64(value) - mean), 2)
+			}
+			stddev := math.Sqrt(sumOfDiffs / float64(seen))
+			mid := seen / 2
+			var median uint64
+			if seen%2 == 1 {
+				median = t[mid]
+			} else {
+				median = t[mid-1] + t[mid]/2
+			}
+			var cumulativeValues Uint64Slice
+			cumulativeValues = make(Uint64Slice, seen, seen)
+			cumulativeValues[0] = t[0]
+			for i := 1; i < seen; i++ {
+				cumulativeValues[i] = t[i] + cumulativeValues[i-1]
+			}
+
+			maxAtThreshold := max
+			sum_pct := sum
+			mean_pct := mean
 
 			for _, pct := range pctls {
 
@@ -238,30 +269,40 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 					// math.Floor(x + 0.5)
 					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
 					if pct.float >= 0 {
-						indexOfPerc -= 1 // index offset=0
+						sum_pct = cumulativeValues[indexOfPerc-1]
+						maxAtThreshold = t[indexOfPerc-1]
+					} else {
+						maxAtThreshold = t[indexOfPerc]
+						sum_pct = cumulativeValues[seen-1] - cumulativeValues[seen-indexOfPerc-1]
 					}
-					maxAtThreshold = t[indexOfPerc]
+					mean_pct = float64(sum_pct) / float64(indexOfPerc)
 				}
 
 				var tmpl string
 				var pctstr string
 				if pct.float >= 0 {
-					tmpl = "%s.upper_%s %d %d\n"
+					tmpl = "%s%s.upper_%s %d %d\n"
 					pctstr = pct.str
 				} else {
-					tmpl = "%s.lower_%s %d %d\n"
+					tmpl = "%s%s.lower_%s %d %d\n"
 					pctstr = pct.str[1:]
 				}
-				fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
+				fmt.Fprintf(buffer, tmpl, *prefix_timers, u, pctstr, maxAtThreshold, now)
+				fmt.Fprintf(buffer, "%s%s.mean_%s %f %d\n", *prefix_timers, u, pctstr, mean_pct, now)
+				fmt.Fprintf(buffer, "%s%s.sum_%s %d %d\n", *prefix_timers, u, pctstr, sum_pct, now)
 			}
 
 			var z Uint64Slice
 			timers[u] = z
 
-			fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
-			fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
-			fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
-			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
+			fmt.Fprintf(buffer, "%s%s.mean %f %d\n", *prefix_timers, u, mean, now)
+			fmt.Fprintf(buffer, "%s%s.median %d %d\n", *prefix_timers, u, median, now)
+			fmt.Fprintf(buffer, "%s%s.std %f %d\n", *prefix_timers, u, stddev, now)
+			fmt.Fprintf(buffer, "%s%s.sum %d %d\n", *prefix_timers, u, sum, now)
+			fmt.Fprintf(buffer, "%s%s.upper %d %d\n", *prefix_timers, u, max, now)
+			fmt.Fprintf(buffer, "%s%s.lower %d %d\n", *prefix_timers, u, min, now)
+			fmt.Fprintf(buffer, "%s%s.count %d %d\n", *prefix_timers, u, count, now)
+			fmt.Fprintf(buffer, "%s%s.count_ps %d %d\n", *prefix_timers, u, count_ps, now)
 		}
 	}
 	return num
@@ -316,7 +357,7 @@ func parseMessage(data []byte) []*Packet {
 }
 
 func udpListener() {
-	address, _ := net.ResolveUDPAddr("udp", *serviceAddress)
+	address, _ := net.ResolveUDPAddr("udp", *listen_addr)
 	log.Printf("listening on %s", address)
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
@@ -345,10 +386,14 @@ func main() {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
 	}
+	config.Parse(*config_file)
+	pcts := strings.Split(*percentile_tresholds, ",")
+	for _, pct := range pcts {
+		percentThreshold.Set(pct)
+	}
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM)
-	*persistCountKeys = -1 * (*persistCountKeys)
 
 	go udpListener()
 	monitor()
