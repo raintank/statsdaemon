@@ -308,7 +308,8 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+var packetRegexpInt = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+var packetRegexpFloat = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 func parseMessage(data []byte) []*Packet {
 	var output []*Packet
@@ -316,10 +317,15 @@ func parseMessage(data []byte) []*Packet {
 		if len(line) == 0 {
 			continue
 		}
-
-		item := packetRegexp.FindSubmatch(line)
+		item := packetRegexpInt.FindSubmatch(line)
 		if len(item) == 0 {
-			continue
+			item = packetRegexpFloat.FindSubmatch(line)
+			if len(item) == 0 {
+				if *debug {
+					log.Printf("invalid line ('%s' does not match pattern)\n", line)
+				}
+				continue
+			}
 		}
 
 		var err error
@@ -335,8 +341,12 @@ func parseMessage(data []byte) []*Packet {
 		default:
 			value, err = strconv.ParseUint(string(item[2]), 10, 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err)
-				continue
+				valueF, err := strconv.ParseFloat(string(item[2]), 64)
+				if err != nil {
+					log.Printf("ERROR: failed to parse as Uint or Float %s - %s", item[2], err)
+					continue
+				}
+				value = uint64(valueF)
 			}
 		}
 
