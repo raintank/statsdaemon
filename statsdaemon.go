@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"sort"
@@ -321,37 +320,66 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
-
 func parseMessage(data []byte) []*Packet {
 	var output []*Packet
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
-		item := packetRegexp.FindSubmatch(line)
-		if len(item) == 0 {
+		parts := bytes.SplitN(line, []byte(":"), 2)
+		if len(parts) != 2 {
 			if *debug {
-				log.Printf("invalid line ('%s' does not match pattern)\n", line)
+				log.Printf("invalid line '%s'\n", line)
 			}
 			continue
 		}
-
-		value, err := strconv.ParseFloat(string(item[2]), 64)
-		if err != nil {
-			log.Printf("ERROR: failed to parseFloat %s - %s", item[2], err)
+		if bytes.Contains(parts[1], []byte(":")) {
+			if *debug {
+				log.Printf("invalid line '%s'\n", line)
+			}
 			continue
 		}
-
-		sampleRate, err := strconv.ParseFloat(string(item[5]), 32)
-		if err != nil {
-			sampleRate = 1
+		bucket := parts[0]
+		parts = bytes.SplitN(parts[1], []byte("|"), 3)
+		if len(parts) < 2 {
+			if *debug {
+				log.Printf("invalid line '%s'\n", line)
+			}
+			continue
 		}
-
+		modifier := string(parts[1])
+		if modifier != "g" && modifier != "c" && modifier != "ms" {
+			if *debug {
+				log.Printf("invalid line '%s'\n", line)
+			}
+			continue
+		}
+		sampleRate := float64(1)
+		if len(parts) == 3 {
+			if parts[2][0] != byte('@') {
+				if *debug {
+					log.Printf("invalid line '%s'\n", line)
+				}
+				continue
+			}
+			var err error
+			sampleRate, err = strconv.ParseFloat(string(parts[2])[1:], 32)
+			if err != nil {
+				if *debug {
+					log.Printf("invalid line '%s'\n", line)
+				}
+				continue
+			}
+		}
+		value, err := strconv.ParseFloat(string(parts[0]), 64)
+		if err != nil {
+			log.Printf("ERROR: failed to parseFloat %s - %s", parts[0], err)
+			continue
+		}
 		packet := &Packet{
-			Bucket:   string(item[1]),
+			Bucket:   string(bucket),
 			Value:    value,
-			Modifier: string(item[3]),
+			Modifier: modifier,
 			Sampling: float32(sampleRate),
 		}
 		output = append(output, packet)
