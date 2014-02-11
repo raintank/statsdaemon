@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -76,6 +77,7 @@ var (
 	debug       = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion = flag.Bool("version", false, "print version string")
 	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
+	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
 )
 
 var (
@@ -375,6 +377,14 @@ func main() {
 	if *showVersion {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
+	}
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 	config.Parse(*config_file)
 	pcts := strings.Split(*percentile_tresholds, ",")
