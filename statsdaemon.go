@@ -92,11 +92,16 @@ func monitor() {
 	for {
 		select {
 		case sig := <-signalchan:
-			fmt.Printf("!! Caught signal %d... shutting down\n", sig)
-			if err := submit(time.Now().Add(period)); err != nil {
-				log.Printf("ERROR: %s", err)
+			switch sig {
+			case syscall.SIGTERM, syscall.SIGINT:
+				fmt.Printf("!! Caught signal %d... shutting down\n", sig)
+				if err := submit(time.Now().Add(period)); err != nil {
+					log.Printf("ERROR: %s", err)
+				}
+				return
+			default:
+				fmt.Printf("unknown signal %d, ignoring\n", sig)
 			}
-			return
 		case <-ticker.C:
 			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
@@ -432,7 +437,7 @@ func main() {
 	}
 
 	signalchan = make(chan os.Signal, 1)
-	signal.Notify(signalchan, syscall.SIGTERM)
+	signal.Notify(signalchan)
 
 	go udpListener()
 	monitor()
