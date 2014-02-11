@@ -31,16 +31,16 @@ var signalchan chan os.Signal
 
 type Packet struct {
 	Bucket   string
-	Value    interface{}
+	Value    float64
 	Modifier string
 	Sampling float32
 }
 
-type Uint64Slice []uint64
+type Float64Slice []float64
 
-func (s Uint64Slice) Len() int           { return len(s) }
-func (s Uint64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s Uint64Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s Float64Slice) Len() int           { return len(s) }
+func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 type Percentiles []*Percentile
 type Percentile struct {
@@ -81,8 +81,8 @@ var (
 var (
 	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters = make(map[string]float64)
-	gauges   = make(map[string]uint64)
-	timers   = make(map[string]Uint64Slice)
+	gauges   = make(map[string]float64)
+	timers   = make(map[string]Float64Slice)
 )
 
 func monitor() {
@@ -104,18 +104,18 @@ func monitor() {
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
 				if !ok {
-					var t Uint64Slice
+					var t Float64Slice
 					timers[s.Bucket] = t
 				}
-				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+				timers[s.Bucket] = append(timers[s.Bucket], s.Value)
 			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = s.Value.(uint64)
+				gauges[s.Bucket] = s.Value
 			} else {
 				v, ok := counters[s.Bucket]
 				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
-				counters[s.Bucket] += float64(s.Value.(int64)) * float64(1/s.Sampling)
+				counters[s.Bucket] += s.Value * float64(1/s.Sampling)
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		if c == math.MaxUint64 {
 			continue
 		}
-		fmt.Fprintf(buffer, "%s%s %d %d\n", *prefix_gauges, g, c, now)
+		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_gauges, g, c, now)
 		gauges[g] = math.MaxUint64
 		num++
 	}
@@ -226,9 +226,9 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			min := t[0]
 			max := t[len(t)-1]
 			count := len(t)
-			count_ps := int64(count) / int64(*flushInterval)
+			count_ps := float64(count) / float64(*flushInterval)
 
-			sum := uint64(0)
+			sum := float64(0)
 			for _, value := range t {
 				sum += value
 			}
@@ -239,14 +239,14 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			}
 			stddev := math.Sqrt(sumOfDiffs / float64(seen))
 			mid := seen / 2
-			var median uint64
+			var median float64
 			if seen%2 == 1 {
 				median = t[mid]
 			} else {
-				median = t[mid-1] + t[mid]/2
+				median = (t[mid-1] + t[mid])/2
 			}
-			var cumulativeValues Uint64Slice
-			cumulativeValues = make(Uint64Slice, seen, seen)
+			var cumulativeValues Float64Slice
+			cumulativeValues = make(Float64Slice, seen, seen)
 			cumulativeValues[0] = t[0]
 			for i := 1; i < seen; i++ {
 				cumulativeValues[i] = t[i] + cumulativeValues[i-1]
@@ -281,35 +281,34 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				var tmpl string
 				var pctstr string
 				if pct.float >= 0 {
-					tmpl = "%s%s.upper_%s %d %d\n"
+					tmpl = "%s%s.upper_%s %f %d\n"
 					pctstr = pct.str
 				} else {
-					tmpl = "%s%s.lower_%s %d %d\n"
+					tmpl = "%s%s.lower_%s %f %d\n"
 					pctstr = pct.str[1:]
 				}
 				fmt.Fprintf(buffer, tmpl, *prefix_timers, u, pctstr, maxAtThreshold, now)
 				fmt.Fprintf(buffer, "%s%s.mean_%s %f %d\n", *prefix_timers, u, pctstr, mean_pct, now)
-				fmt.Fprintf(buffer, "%s%s.sum_%s %d %d\n", *prefix_timers, u, pctstr, sum_pct, now)
+				fmt.Fprintf(buffer, "%s%s.sum_%s %f %d\n", *prefix_timers, u, pctstr, sum_pct, now)
 			}
 
-			var z Uint64Slice
+			var z Float64Slice
 			timers[u] = z
 
 			fmt.Fprintf(buffer, "%s%s.mean %f %d\n", *prefix_timers, u, mean, now)
-			fmt.Fprintf(buffer, "%s%s.median %d %d\n", *prefix_timers, u, median, now)
+			fmt.Fprintf(buffer, "%s%s.median %f %d\n", *prefix_timers, u, median, now)
 			fmt.Fprintf(buffer, "%s%s.std %f %d\n", *prefix_timers, u, stddev, now)
-			fmt.Fprintf(buffer, "%s%s.sum %d %d\n", *prefix_timers, u, sum, now)
-			fmt.Fprintf(buffer, "%s%s.upper %d %d\n", *prefix_timers, u, max, now)
-			fmt.Fprintf(buffer, "%s%s.lower %d %d\n", *prefix_timers, u, min, now)
+			fmt.Fprintf(buffer, "%s%s.sum %f %d\n", *prefix_timers, u, sum, now)
+			fmt.Fprintf(buffer, "%s%s.upper %f %d\n", *prefix_timers, u, max, now)
+			fmt.Fprintf(buffer, "%s%s.lower %f %d\n", *prefix_timers, u, min, now)
 			fmt.Fprintf(buffer, "%s%s.count %d %d\n", *prefix_timers, u, count, now)
-			fmt.Fprintf(buffer, "%s%s.count_ps %d %d\n", *prefix_timers, u, count_ps, now)
+			fmt.Fprintf(buffer, "%s%s.count_ps %f %d\n", *prefix_timers, u, count_ps, now)
 		}
 	}
 	return num
 }
 
-var packetRegexpInt = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
-var packetRegexpFloat = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 func parseMessage(data []byte) []*Packet {
 	var output []*Packet
@@ -317,37 +316,18 @@ func parseMessage(data []byte) []*Packet {
 		if len(line) == 0 {
 			continue
 		}
-		item := packetRegexpInt.FindSubmatch(line)
+		item := packetRegexp.FindSubmatch(line)
 		if len(item) == 0 {
-			item = packetRegexpFloat.FindSubmatch(line)
-			if len(item) == 0 {
-				if *debug {
-					log.Printf("invalid line ('%s' does not match pattern)\n", line)
-				}
-				continue
+			if *debug {
+				log.Printf("invalid line ('%s' does not match pattern)\n", line)
 			}
+			continue
 		}
 
-		var err error
-		var value interface{}
-		modifier := string(item[3])
-		switch modifier {
-		case "c":
-			value, err = strconv.ParseInt(string(item[2]), 10, 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err)
-				continue
-			}
-		default:
-			value, err = strconv.ParseUint(string(item[2]), 10, 64)
-			if err != nil {
-				valueF, err := strconv.ParseFloat(string(item[2]), 64)
-				if err != nil {
-					log.Printf("ERROR: failed to parse as Uint or Float %s - %s", item[2], err)
-					continue
-				}
-				value = uint64(valueF)
-			}
+		value, err := strconv.ParseFloat(string(item[2]), 64)
+		if err != nil {
+			log.Printf("ERROR: failed to parseFloat %s - %s", item[2], err)
+			continue
 		}
 
 		sampleRate, err := strconv.ParseFloat(string(item[5]), 32)
@@ -358,7 +338,7 @@ func parseMessage(data []byte) []*Packet {
 		packet := &Packet{
 			Bucket:   string(item[1]),
 			Value:    value,
-			Modifier: modifier,
+			Modifier: string(item[3]),
 			Sampling: float32(sampleRate),
 		}
 		output = append(output, packet)
