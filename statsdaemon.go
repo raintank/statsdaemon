@@ -243,7 +243,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			if seen%2 == 1 {
 				median = t[mid]
 			} else {
-				median = (t[mid-1] + t[mid])/2
+				median = (t[mid-1] + t[mid]) / 2
 			}
 			var cumulativeValues Float64Slice
 			cumulativeValues = make(Float64Slice, seen, seen)
