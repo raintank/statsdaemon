@@ -123,6 +123,18 @@ func monitor() {
 	}
 }
 
+type processFn func(*bytes.Buffer, int64, Percentiles) int64
+
+func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentiles, name string) (num int64) {
+	time_start := time.Now()
+	num = fun(buffer, now, pctls)
+	time_end := time.Now()
+	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000)
+	log.Printf("stats.statsdaemon.%s.type=%s.what=calculation.unit=ms %f %d\n", "dfvimeographite3", name, duration_ms, now)
+	log.Printf("stats.statsdaemon.%s.%s.type=%s.direction=out.unit=metrics %d %d\n", "dfvimeographite3", *graphite_addr, name, num, now)
+	return
+}
+
 func submit(deadline time.Time) error {
 	var buffer bytes.Buffer
 	var num int64
@@ -133,8 +145,8 @@ func submit(deadline time.Time) error {
 	if err != nil {
 		if *debug {
 			log.Printf("WARNING: resetting counters when in debug mode")
-			processCounters(&buffer, now)
-			processGauges(&buffer, now)
+			processCounters(&buffer, now, percentThreshold)
+			processGauges(&buffer, now, percentThreshold)
 			processTimers(&buffer, now, percentThreshold)
 		}
 		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err)
@@ -147,10 +159,9 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("could not set deadline:", err)
 		return errors.New(errmsg)
 	}
-
-	num += processCounters(&buffer, now)
-	num += processGauges(&buffer, now)
-	num += processTimers(&buffer, now, percentThreshold)
+	num += instrument(processCounters, &buffer, now, percentThreshold, "counters")
+	num += instrument(processGauges, &buffer, now, percentThreshold, "gauges")
+	num += instrument(processTimers, &buffer, now, percentThreshold, "timers")
 	if num == 0 {
 		return nil
 	}
@@ -170,12 +181,12 @@ func submit(deadline time.Time) error {
 		return errors.New(errmsg)
 	}
 
-	log.Printf("sent %d stats to %s", num, *graphite_addr)
-
+	//fmt.Println("end of submit")
+	//fmt.Fprintf(&buffer, ...
 	return nil
 }
 
-func processCounters(buffer *bytes.Buffer, now int64) int64 {
+func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for s, c := range counters {
 		counters[s] = -1
@@ -188,7 +199,7 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	return num
 }
 
-func processGauges(buffer *bytes.Buffer, now int64) int64 {
+func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for g, c := range gauges {
 		if c == math.MaxUint64 {

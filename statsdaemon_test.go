@@ -201,8 +201,8 @@ func BenchmarkManyDifferentSensors(t *testing.B) {
 	now := time.Now().Unix()
 	t.ResetTimer()
 	processTimers(&buff, now, commonPercentiles)
-	processCounters(&buff, now)
-	processGauges(&buff, now)
+	processCounters(&buff, now, commonPercentiles)
+	processGauges(&buff, now, commonPercentiles)
 }
 
 func BenchmarkOneBigTimer(t *testing.B) {
