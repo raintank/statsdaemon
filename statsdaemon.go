@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -33,6 +34,12 @@ type Packet struct {
 	Bucket   string
 	Value    float64
 	Modifier string
+	Sampling float32
+}
+
+// an amount of 1 per instance is imlpied
+type SubmitAmount struct {
+	Bucket   string
 	Sampling float32
 }
 
@@ -70,6 +77,7 @@ func (a *Percentiles) String() string {
 
 var (
 	listen_addr          = config.String("listen_addr", ":8125")
+	admin_addr           = config.String("admin_addr", ":8126")
 	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval        = config.Int("flush_interval", 10)
 	prefix_rates         = config.String("prefix_rates", "stats.")
@@ -77,6 +85,7 @@ var (
 	prefix_gauges        = config.String("prefix_gauges", "stats.gauges.")
 	percentile_tresholds = config.String("percentile_tresholds", "")
 	percentThreshold     = Percentiles{}
+	max_timers_per_s     = config.Uint64("max_timers_per_s", 1000)
 
 	debug       = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion = flag.Bool("version", false, "print version string")
@@ -85,14 +94,21 @@ var (
 	memprofile  = flag.String("memprofile", "", "write memory profile to this file")
 )
 
+type metricsSeenReq struct {
+	Bucket string
+	Conn   *net.Conn
+}
+
 var (
-	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	counters = make(map[string]float64)
-	gauges   = make(map[string]float64)
-	timers   = make(map[string]Float64Slice)
+	Metrics            = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+	metricsSeen        = make(chan SubmitAmount)
+	idealSampleRateReq = make(chan metricsSeenReq)
+	counters           = make(map[string]float64)
+	gauges             = make(map[string]float64)
+	timers             = make(map[string]TimerData)
 )
 
-func monitor() {
+func metricsMonitor() {
 	period := time.Duration(*flushInterval) * time.Second
 	ticker := time.NewTicker(period)
 	for {
@@ -112,7 +128,7 @@ func monitor() {
 			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
 			}
-		case s := <-In:
+		case s := <-Metrics:
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
 				if !ok {
@@ -416,8 +432,133 @@ func udpListener() {
 		}
 
 		for _, p := range parseMessage(message[:n]) {
-			In <- p
+			Metrics <- p
+			metricsSeen <- SubmitAmount{p.Bucket, p.Sampling}
 		}
+	}
+}
+
+// submitted is "triggered" inside statsd client libs, not necessarily sent
+// after sampling, network loss and udp packet drops, the amount we see is Seen
+type Amounts struct {
+	Submitted uint64
+	Seen      uint64
+}
+
+func metricsSeenMonitor() {
+	period := 10 * time.Second
+	ticker := time.NewTicker(period)
+	// use two maps so we always have enough data shortly after we start a new period
+	// counts would be too low and/or too inaccurate otherwise
+	_countsA := make(map[string]*Amounts)
+	_countsB := make(map[string]*Amounts)
+	cur_counts := &_countsA
+	prev_counts := &_countsB
+	var swap_ts time.Time
+	for {
+		select {
+		case <-ticker.C:
+			prev_counts = cur_counts
+			new_counts := make(map[string]*Amounts)
+			cur_counts = &new_counts
+			swap_ts = time.Now()
+		case s_a := <-metricsSeen:
+			el, ok := (*cur_counts)[s_a.Bucket]
+			if ok {
+				el.Seen += 1
+				el.Submitted += uint64(1 / s_a.Sampling)
+			} else {
+				(*cur_counts)[s_a.Bucket] = &Amounts{1, uint64(1 / s_a.Sampling)}
+			}
+		case req := <-idealSampleRateReq:
+			current_ts := time.Now()
+			interval := current_ts.Sub(swap_ts).Seconds() + 10
+			submitted := uint64(0)
+			el, ok := (*cur_counts)[req.Bucket]
+			if ok {
+				submitted += el.Submitted
+			}
+			el, ok = (*prev_counts)[req.Bucket]
+			if ok {
+				submitted += el.Submitted
+			}
+			submitted_per_s := submitted / uint64(interval)
+			// submitted (at source) per second * ideal_sample_rate should be ~= *max_timers_per_s
+			ideal_sample_rate := float32(1)
+			if submitted_per_s > *max_timers_per_s {
+				ideal_sample_rate = float32(*max_timers_per_s) / float32(submitted_per_s)
+			}
+			resp := fmt.Sprintf("%s %f\n", req.Bucket, ideal_sample_rate)
+			go handleApiRequest(*req.Conn, []byte(resp))
+		}
+	}
+}
+
+func writeHelp(conn net.Conn) {
+	help := `
+    commands:
+        ideal_sample_rate <metric key>   get the ideal sample rate for given metric
+        help                             show this menu
+
+`
+	conn.Write([]byte(help))
+}
+
+func handleApiRequest(conn net.Conn, write_first []byte) {
+	conn.Write(write_first)
+	// Make a buffer to hold incoming data.
+	buf := make([]byte, 1024)
+	// Read the incoming connection into the buffer.
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("read eof. closing")
+				conn.Close()
+				break
+			} else {
+				fmt.Println("Error reading:", err.Error())
+			}
+		}
+		clean_cmd := strings.TrimSpace(string(buf[:n]))
+		command := strings.Split(clean_cmd, " ")
+		if *debug {
+			fmt.Println("received command: '" + clean_cmd + "'")
+		}
+		switch command[0] {
+		case "ideal_sample_rate":
+			if len(command) != 2 {
+				conn.Write([]byte("invalid request\n"))
+				writeHelp(conn)
+				continue
+			}
+			idealSampleRateReq <- metricsSeenReq{command[1], &conn}
+			return
+		case "help":
+			writeHelp(conn)
+			continue
+		default:
+			conn.Write([]byte("unknown command\n"))
+			writeHelp(conn)
+		}
+	}
+}
+func adminListener() {
+	l, err := net.Listen("tcp", *admin_addr)
+	if err != nil {
+		fmt.Println("Error listening:", err.Error())
+		os.Exit(1)
+	}
+	defer l.Close()
+	fmt.Println("Listening on " + *admin_addr)
+	for {
+		// Listen for an incoming connection.
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting: ", err.Error())
+			os.Exit(1)
+		}
+		go handleApiRequest(conn, []byte(""))
 	}
 }
 
@@ -454,5 +595,7 @@ func main() {
 	signal.Notify(signalchan)
 
 	go udpListener()
-	monitor()
+	go adminListener()
+	go metricsSeenMonitor()
+	metricsMonitor()
 }
