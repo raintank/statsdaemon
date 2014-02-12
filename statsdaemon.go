@@ -82,6 +82,7 @@ var (
 	showVersion = flag.Bool("version", false, "print version string")
 	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
 	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
+	memprofile  = flag.String("memprofile", "", "write memory profile to this file")
 )
 
 var (
@@ -434,6 +435,14 @@ func main() {
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
+	}
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		defer pprof.WriteHeapProfile(f)
 	}
 	config.Parse(*config_file)
 	pcts := strings.Split(*percentile_tresholds, ",")
