@@ -400,7 +400,7 @@ func parseMessage(data []byte) []*Packet {
 		}
 		value, err := strconv.ParseFloat(string(parts[0]), 64)
 		if err != nil {
-			log.Printf("ERROR: failed to parseFloat %s - %s", parts[0], err)
+			log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
 			continue
 		}
 		packet := &Packet{
