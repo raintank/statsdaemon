@@ -38,6 +38,11 @@ type Packet struct {
 
 type Float64Slice []float64
 
+type TimerData struct {
+	Points           Float64Slice
+	Amount_submitted int64
+}
+
 func (s Float64Slice) Len() int           { return len(s) }
 func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
@@ -110,10 +115,13 @@ func monitor() {
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
 				if !ok {
-					var t Float64Slice
-					timers[s.Bucket] = t
+					var p Float64Slice
+					timers[s.Bucket] = TimerData{p, 0}
 				}
-				timers[s.Bucket] = append(timers[s.Bucket], s.Value)
+				t := timers[s.Bucket]
+				t.Points = append(t.Points, s.Value)
+				t.Amount_submitted += int64(1 / s.Sampling)
+				timers[s.Bucket] = t
 			} else if s.Modifier == "g" {
 				gauges[s.Bucket] = s.Value
 			} else {
@@ -218,8 +226,8 @@ func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	// these are the metrics that get exposed:
-	// count  estimate of original amount, by dividing received by samplerate
-	// count_ps  same, per second
+	// count estimate of original amount of metrics sent, by dividing received by samplerate
+	// count_ps  same but per second
 	// lower
 	// mean  // arithmetic mean
 	// mean_<pct> // arithmetic mean of values below <pct> percentile
@@ -230,43 +238,40 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	// upper
 	// upper_90 / lower_90
 
-	// internal vars:
-	// seen -> len(t), i.e. real values seen.
-
 	var num int64
 	for u, t := range timers {
-		if len(t) > 0 {
-			seen := len(t)
+		if len(t.Points) > 0 {
+			seen := len(t.Points)
+			count := t.Amount_submitted
+			count_ps := float64(count) / float64(*flushInterval)
 			num++
 
-			sort.Sort(t)
-			min := t[0]
-			max := t[len(t)-1]
-			count := len(t)
-			count_ps := float64(count) / float64(*flushInterval)
+			sort.Sort(t.Points)
+			min := t.Points[0]
+			max := t.Points[seen-1]
 
 			sum := float64(0)
-			for _, value := range t {
+			for _, value := range t.Points {
 				sum += value
 			}
-			mean := float64(sum) / float64(len(t))
+			mean := float64(sum) / float64(seen)
 			sumOfDiffs := float64(0)
-			for _, value := range t {
+			for _, value := range t.Points {
 				sumOfDiffs += math.Pow((float64(value) - mean), 2)
 			}
 			stddev := math.Sqrt(sumOfDiffs / float64(seen))
 			mid := seen / 2
 			var median float64
 			if seen%2 == 1 {
-				median = t[mid]
+				median = t.Points[mid]
 			} else {
-				median = (t[mid-1] + t[mid]) / 2
+				median = (t.Points[mid-1] + t.Points[mid]) / 2
 			}
 			var cumulativeValues Float64Slice
 			cumulativeValues = make(Float64Slice, seen, seen)
-			cumulativeValues[0] = t[0]
+			cumulativeValues[0] = t.Points[0]
 			for i := 1; i < seen; i++ {
-				cumulativeValues[i] = t[i] + cumulativeValues[i-1]
+				cumulativeValues[i] = t.Points[i] + cumulativeValues[i-1]
 			}
 
 			maxAtThreshold := max
@@ -275,7 +280,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 
 			for _, pct := range pctls {
 
-				if len(t) > 1 {
+				if seen > 1 {
 					var abs float64
 					if pct.float >= 0 {
 						abs = pct.float
@@ -284,12 +289,12 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 					}
 					// poor man's math.Round(x):
 					// math.Floor(x + 0.5)
-					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
+					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(seen)) + 0.5))
 					if pct.float >= 0 {
 						sum_pct = cumulativeValues[indexOfPerc-1]
-						maxAtThreshold = t[indexOfPerc-1]
+						maxAtThreshold = t.Points[indexOfPerc-1]
 					} else {
-						maxAtThreshold = t[indexOfPerc]
+						maxAtThreshold = t.Points[indexOfPerc]
 						sum_pct = cumulativeValues[seen-1] - cumulativeValues[seen-indexOfPerc-1]
 					}
 					mean_pct = float64(sum_pct) / float64(indexOfPerc)
@@ -310,7 +315,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			}
 
 			var z Float64Slice
-			timers[u] = z
+			timers[u] = TimerData{z, 0}
 
 			fmt.Fprintf(buffer, "%s%s.mean %f %d\n", *prefix_timers, u, mean, now)
 			fmt.Fprintf(buffer, "%s%s.median %f %d\n", *prefix_timers, u, median, now)
