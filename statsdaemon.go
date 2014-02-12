@@ -158,7 +158,7 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 	time_start := time.Now()
 	num = fun(buffer, now, pctls)
 	time_end := time.Now()
-	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000)
+	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
 	log.Printf("stats.statsdaemon.%s.type=%s.what=calculation.unit=ms %f %d\n", "dfvimeographite3", name, duration_ms, now)
 	log.Printf("stats.statsdaemon.%s.%s.type=%s.direction=out.unit=metrics %d %d\n", "dfvimeographite3", *graphite_addr, name, num, now)
 	return
