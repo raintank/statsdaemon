@@ -190,7 +190,7 @@ func submit(deadline time.Time) error {
 			if len(line) == 0 {
 				continue
 			}
-			log.Printf("DEBUG: %s", line)
+			log.Printf("DEBUG: WRITING %s", line)
 		}
 	}
 
