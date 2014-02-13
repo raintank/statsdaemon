@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/vimeo/statsdaemon/common"
+	"github.com/vimeo/statsdaemon/metrics2"
 	"github.com/vimeo/statsdaemon/timer"
 	"io"
 	"log"
@@ -13,7 +14,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"sort"
@@ -206,13 +206,10 @@ func submit(deadline time.Time) error {
 }
 
 func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
-	re := regexp.MustCompile("\\.unit=([^\\.]*)\\.")
 	var num int64
 	for s, c := range counters {
 		v := c / float64(*flushInterval)
-		// if metrics2.0 counter, update unit and target_type
-		s = re.ReplaceAllString(s, ".unit=${1}ps.")
-		s = strings.Replace(s, "target_type=count", "target_type=rate", 1)
+		s = metrics2.Derive(s)
 		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_rates, s, v, now)
 		num++
 		delete(counters, s)
