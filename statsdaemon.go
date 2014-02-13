@@ -124,8 +124,8 @@ func metricsMonitor() {
 				gauges[s.Bucket] = s.Value
 				name = "gauge"
 			} else {
-				v, ok := counters[s.Bucket]
-				if !ok || v < 0 {
+				_, ok := counters[s.Bucket]
+				if !ok {
 					counters[s.Bucket] = 0
 				}
 				counters[s.Bucket] += s.Value * float64(1/s.Sampling)
@@ -209,7 +209,6 @@ func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	re := regexp.MustCompile("\\.unit=([^\\.]*)\\.")
 	var num int64
 	for s, c := range counters {
-		counters[s] = -1
 		v := c / float64(*flushInterval)
 		// if metrics2.0 counter, update unit
 		s = re.ReplaceAllString(s, ".unit=${1}ps.")
