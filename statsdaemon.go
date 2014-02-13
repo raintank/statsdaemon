@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"sort"
@@ -64,6 +65,7 @@ var (
 	admin_addr           = config.String("admin_addr", ":8126")
 	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval        = config.Int("flush_interval", 10)
+	instance             = config.String("instance", "default")
 	prefix_rates         = config.String("prefix_rates", "stats.")
 	prefix_timers        = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges        = config.String("prefix_gauges", "stats.gauges.")
@@ -90,6 +92,7 @@ var (
 	counters              = make(map[string]float64)
 	gauges                = make(map[string]float64)
 	timers                = make(map[string]timer.Data)
+	prefix_internal       string
 )
 
 func metricsMonitor() {
@@ -113,16 +116,27 @@ func metricsMonitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-Metrics:
+			var name string
 			if s.Modifier == "ms" {
 				timer.Add(timers, s)
+				name = "timer"
 			} else if s.Modifier == "g" {
 				gauges[s.Bucket] = s.Value
+				name = "gauge"
 			} else {
 				v, ok := counters[s.Bucket]
 				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
 				counters[s.Bucket] += s.Value * float64(1/s.Sampling)
+				name = "counter"
+			}
+			k := fmt.Sprintf("%sunit=Metric.direction=in.metric_type=%s", prefix_internal, name)
+			_, ok := counters[k]
+			if !ok {
+				counters[k] = 1
+			} else {
+				counters[k] += 1
 			}
 		}
 	}
@@ -135,8 +149,8 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 	num = fun(buffer, now, pctls)
 	time_end := time.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	log.Printf("stats.statsdaemon.%s.type=%s.what=calculation.unit=ms %f %d\n", "dfvimeographite3", name, duration_ms, now)
-	log.Printf("stats.statsdaemon.%s.%s.type=%s.direction=out.unit=metrics %d %d\n", "dfvimeographite3", *graphite_addr, name, num, now)
+	fmt.Fprintf(buffer, "%sunit=ms.metric_type=%s.type=calculation %f %d\n", prefix_internal, name, duration_ms, now)
+	fmt.Fprintf(buffer, "%sunit=Metricps.direction=out.metric_type=%s %f %d\n", prefix_internal, name, float64(num)/float64(*flushInterval), now)
 	return
 }
 
@@ -164,9 +178,9 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("could not set deadline:", err)
 		return errors.New(errmsg)
 	}
-	num += instrument(processCounters, &buffer, now, percentThreshold, "counters")
-	num += instrument(processGauges, &buffer, now, percentThreshold, "gauges")
-	num += instrument(processTimers, &buffer, now, percentThreshold, "timers")
+	num += instrument(processCounters, &buffer, now, percentThreshold, "counter")
+	num += instrument(processGauges, &buffer, now, percentThreshold, "gauge")
+	num += instrument(processTimers, &buffer, now, percentThreshold, "timer")
 	if num == 0 {
 		return nil
 	}
@@ -192,10 +206,13 @@ func submit(deadline time.Time) error {
 }
 
 func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
+	re := regexp.MustCompile("\\.unit=([^\\.]*)\\.")
 	var num int64
 	for s, c := range counters {
 		counters[s] = -1
 		v := c / float64(*flushInterval)
+		// if metrics2.0 counter, update unit
+		s = re.ReplaceAllString(s, ".unit=${1}ps.")
 		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_rates, s, v, now)
 		num++
 		delete(counters, s)
@@ -334,12 +351,14 @@ func parseMessage(data []byte) []*common.Metric {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
 			}
+			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 			continue
 		}
 		if bytes.Contains(parts[1], []byte(":")) {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
 			}
+			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 			continue
 		}
 		bucket := parts[0]
@@ -348,6 +367,7 @@ func parseMessage(data []byte) []*common.Metric {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
 			}
+			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 			continue
 		}
 		modifier := string(parts[1])
@@ -355,6 +375,7 @@ func parseMessage(data []byte) []*common.Metric {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
 			}
+			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 			continue
 		}
 		sampleRate := float64(1)
@@ -363,6 +384,7 @@ func parseMessage(data []byte) []*common.Metric {
 				if *debug {
 					log.Printf("invalid line '%s'\n", line)
 				}
+				output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 				continue
 			}
 			var err error
@@ -371,12 +393,14 @@ func parseMessage(data []byte) []*common.Metric {
 				if *debug {
 					log.Printf("invalid line '%s'\n", line)
 				}
+				output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 				continue
 			}
 		}
 		value, err := strconv.ParseFloat(string(parts[0]), 64)
 		if err != nil {
 			log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
+			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
 			continue
 		}
 		packet := &common.Metric{
@@ -587,6 +611,7 @@ func main() {
 	for _, pct := range pcts {
 		percentThreshold.Set(pct)
 	}
+	prefix_internal = "service=statsdaemon.instance=" + *instance + "."
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan)

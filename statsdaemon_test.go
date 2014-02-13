@@ -89,13 +89,17 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
+	errors_key := "unit=Err.type=invalid_line"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
 	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	assert.Equal(t, len(packets), 2)
+	assert.Equal(t, packets[0].Bucket, errors_key)
+	assert.Equal(t, packets[1].Bucket, errors_key)
 
 	d = []byte("a.key.with-0.dash:4")
 	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	assert.Equal(t, len(packets), 1)
+	assert.Equal(t, packets[0].Bucket, errors_key)
 }
 
 func TestMean(t *testing.T) {
