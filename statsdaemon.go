@@ -38,7 +38,7 @@ type Packet struct {
 }
 
 // an amount of 1 per instance is imlpied
-type SubmitAmount struct {
+type metricAmount struct {
 	Bucket   string
 	Sampling float32
 }
@@ -94,18 +94,18 @@ var (
 	memprofile  = flag.String("memprofile", "", "write memory profile to this file")
 )
 
-type metricsSeenReq struct {
-	Bucket string
-	Conn   *net.Conn
+type metricsStatsReq struct {
+	Command []string
+	Conn    *net.Conn
 }
 
 var (
-	Metrics            = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	metricsSeen        = make(chan SubmitAmount)
-	idealSampleRateReq = make(chan metricsSeenReq)
-	counters           = make(map[string]float64)
-	gauges             = make(map[string]float64)
-	timers             = make(map[string]TimerData)
+	Metrics               = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+	metricAmountCollector = make(chan metricAmount)
+	metricStatsRequests   = make(chan metricsStatsReq)
+	counters              = make(map[string]float64)
+	gauges                = make(map[string]float64)
+	timers                = make(map[string]TimerData)
 )
 
 func metricsMonitor() {
@@ -433,7 +433,7 @@ func udpListener() {
 
 		for _, p := range parseMessage(message[:n]) {
 			Metrics <- p
-			metricsSeen <- SubmitAmount{p.Bucket, p.Sampling}
+			metricAmountCollector <- metricAmount{p.Bucket, p.Sampling}
 		}
 	}
 }
@@ -445,7 +445,7 @@ type Amounts struct {
 	Seen      uint64
 }
 
-func metricsSeenMonitor() {
+func metricStatsMonitor() {
 	period := 10 * time.Second
 	ticker := time.NewTicker(period)
 	// use two maps so we always have enough data shortly after we start a new period
@@ -462,7 +462,7 @@ func metricsSeenMonitor() {
 			new_counts := make(map[string]*Amounts)
 			cur_counts = &new_counts
 			swap_ts = time.Now()
-		case s_a := <-metricsSeen:
+		case s_a := <-metricAmountCollector:
 			el, ok := (*cur_counts)[s_a.Bucket]
 			if ok {
 				el.Seen += 1
@@ -470,26 +470,36 @@ func metricsSeenMonitor() {
 			} else {
 				(*cur_counts)[s_a.Bucket] = &Amounts{1, uint64(1 / s_a.Sampling)}
 			}
-		case req := <-idealSampleRateReq:
+		case req := <-metricStatsRequests:
 			current_ts := time.Now()
 			interval := current_ts.Sub(swap_ts).Seconds() + 10
-			submitted := uint64(0)
-			el, ok := (*cur_counts)[req.Bucket]
-			if ok {
-				submitted += el.Submitted
+			var resp bytes.Buffer
+			switch req.Command[0] {
+			case "sample_rate":
+				bucket := req.Command[1]
+				submitted := uint64(0)
+				el, ok := (*cur_counts)[bucket]
+				if ok {
+					submitted += el.Submitted
+				}
+				el, ok = (*prev_counts)[bucket]
+				if ok {
+					submitted += el.Submitted
+				}
+				submitted_per_s := submitted / uint64(interval)
+				// submitted (at source) per second * ideal_sample_rate should be ~= *max_timers_per_s
+				ideal_sample_rate := float32(1)
+				if submitted_per_s > *max_timers_per_s {
+					ideal_sample_rate = float32(*max_timers_per_s) / float32(submitted_per_s)
+				}
+				fmt.Fprintf(&resp, "%s %f %d\n", bucket, ideal_sample_rate, submitted_per_s)
+			case "metric_stats":
+				for bucket, el := range *prev_counts {
+					fmt.Fprintf(&resp, "%s %d %d\n", bucket, el.Submitted / 10, el.Seen / 10)
+				}
 			}
-			el, ok = (*prev_counts)[req.Bucket]
-			if ok {
-				submitted += el.Submitted
-			}
-			submitted_per_s := submitted / uint64(interval)
-			// submitted (at source) per second * ideal_sample_rate should be ~= *max_timers_per_s
-			ideal_sample_rate := float32(1)
-			if submitted_per_s > *max_timers_per_s {
-				ideal_sample_rate = float32(*max_timers_per_s) / float32(submitted_per_s)
-			}
-			resp := fmt.Sprintf("%s %f\n", req.Bucket, ideal_sample_rate)
-			go handleApiRequest(*req.Conn, []byte(resp))
+
+			go handleApiRequest(*req.Conn, resp)
 		}
 	}
 }
@@ -497,15 +507,18 @@ func metricsSeenMonitor() {
 func writeHelp(conn net.Conn) {
 	help := `
     commands:
-        ideal_sample_rate <metric key>   get the ideal sample rate for given metric
+        sample_rate <metric key>         for given metric, show:
+                                         <key> <ideal sample rate> <Pckt/s sent (estim)>
         help                             show this menu
+        metric_stats                     in the past 10s interval, for every metric show:
+                                         <key> <Pckt/s sent (estim)> <Pckt/s received>
 
 `
 	conn.Write([]byte(help))
 }
 
-func handleApiRequest(conn net.Conn, write_first []byte) {
-	conn.Write(write_first)
+func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
+	write_first.WriteTo(conn)
 	// Make a buffer to hold incoming data.
 	buf := make([]byte, 1024)
 	// Read the incoming connection into the buffer.
@@ -526,13 +539,21 @@ func handleApiRequest(conn net.Conn, write_first []byte) {
 			fmt.Println("received command: '" + clean_cmd + "'")
 		}
 		switch command[0] {
-		case "ideal_sample_rate":
+		case "sample_rate":
 			if len(command) != 2 {
 				conn.Write([]byte("invalid request\n"))
 				writeHelp(conn)
 				continue
 			}
-			idealSampleRateReq <- metricsSeenReq{command[1], &conn}
+			metricStatsRequests <- metricsStatsReq{command, &conn}
+			return
+		case "metric_stats":
+			if len(command) != 1 {
+				conn.Write([]byte("invalid request\n"))
+				writeHelp(conn)
+				continue
+			}
+			metricStatsRequests <- metricsStatsReq{command, &conn}
 			return
 		case "help":
 			writeHelp(conn)
@@ -558,7 +579,7 @@ func adminListener() {
 			fmt.Println("Error accepting: ", err.Error())
 			os.Exit(1)
 		}
-		go handleApiRequest(conn, []byte(""))
+		go handleApiRequest(conn, bytes.Buffer{})
 	}
 }
 
@@ -596,6 +617,6 @@ func main() {
 
 	go udpListener()
 	go adminListener()
-	go metricsSeenMonitor()
+	go metricStatsMonitor()
 	metricsMonitor()
 }
