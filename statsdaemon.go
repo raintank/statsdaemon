@@ -131,7 +131,7 @@ func metricsMonitor() {
 				counters[s.Bucket] += s.Value * float64(1/s.Sampling)
 				name = "counter"
 			}
-			k := fmt.Sprintf("%sunit=Metric.direction=in.metric_type=%s", prefix_internal, name)
+			k := fmt.Sprintf("%sdirection=in.statsd_type=%s.target_type=count.unit=Metric", prefix_internal, name)
 			_, ok := counters[k]
 			if !ok {
 				counters[k] = 1
@@ -149,8 +149,8 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 	num = fun(buffer, now, pctls)
 	time_end := time.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	fmt.Fprintf(buffer, "%sunit=ms.metric_type=%s.type=calculation %f %d\n", prefix_internal, name, duration_ms, now)
-	fmt.Fprintf(buffer, "%sunit=Metricps.direction=out.metric_type=%s %f %d\n", prefix_internal, name, float64(num)/float64(*flushInterval), now)
+	fmt.Fprintf(buffer, "%s%sstatsd_type=%s.target_type=gauge.type=calculation.unit=ms %f %d\n", *prefix_gauges, prefix_internal, name, duration_ms, now)
+	fmt.Fprintf(buffer, "%s%sdirection=out.statsd_type=%s.target_type=rate.unit=Metricps %f %d\n", *prefix_rates, prefix_internal, name, float64(num)/float64(*flushInterval), now)
 	return
 }
 
@@ -210,8 +210,9 @@ func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for s, c := range counters {
 		v := c / float64(*flushInterval)
-		// if metrics2.0 counter, update unit
+		// if metrics2.0 counter, update unit and target_type
 		s = re.ReplaceAllString(s, ".unit=${1}ps.")
+		s = strings.Replace(s, "target_type=count", "target_type=rate", 1)
 		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_rates, s, v, now)
 		num++
 		delete(counters, s)
@@ -339,76 +340,68 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
+func parseLine(line []byte) (metric *common.Metric, valid bool) {
+	if len(line) == 0 {
+		return nil, true
+	}
+	parts := bytes.SplitN(line, []byte(":"), 2)
+	if len(parts) != 2 {
+		return nil, false
+	}
+	if bytes.Contains(parts[1], []byte(":")) {
+		return nil, false
+	}
+	bucket := parts[0]
+	parts = bytes.SplitN(parts[1], []byte("|"), 3)
+	if len(parts) < 2 {
+		return nil, false
+	}
+	modifier := string(parts[1])
+	if modifier != "g" && modifier != "c" && modifier != "ms" {
+		return nil, false
+	}
+	sampleRate := float64(1)
+	if len(parts) == 3 {
+		if parts[2][0] != byte('@') {
+			return nil, false
+		}
+		var err error
+		sampleRate, err = strconv.ParseFloat(string(parts[2])[1:], 32)
+		if err != nil {
+			return nil, false
+		}
+	}
+	value, err := strconv.ParseFloat(string(parts[0]), 64)
+	if err != nil {
+		log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
+		return nil, false
+	}
+	metric = &common.Metric{
+		Bucket:   string(bucket),
+		Value:    value,
+		Modifier: modifier,
+		Sampling: float32(sampleRate),
+	}
+	return metric, true
+}
+
 func parseMessage(data []byte) []*common.Metric {
 	var output []*common.Metric
 	for _, line := range bytes.Split(data, []byte("\n")) {
-		if len(line) == 0 {
-			continue
-		}
-		parts := bytes.SplitN(line, []byte(":"), 2)
-		if len(parts) != 2 {
+		metric, valid := parseLine(line)
+		if !valid {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
 			}
-			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-			continue
+			metric = &common.Metric{
+				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
+				float64(1),
+				"c",
+				float32(1)}
 		}
-		if bytes.Contains(parts[1], []byte(":")) {
-			if *debug {
-				log.Printf("invalid line '%s'\n", line)
-			}
-			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-			continue
+		if metric != nil {
+			output = append(output, metric)
 		}
-		bucket := parts[0]
-		parts = bytes.SplitN(parts[1], []byte("|"), 3)
-		if len(parts) < 2 {
-			if *debug {
-				log.Printf("invalid line '%s'\n", line)
-			}
-			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-			continue
-		}
-		modifier := string(parts[1])
-		if modifier != "g" && modifier != "c" && modifier != "ms" {
-			if *debug {
-				log.Printf("invalid line '%s'\n", line)
-			}
-			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-			continue
-		}
-		sampleRate := float64(1)
-		if len(parts) == 3 {
-			if parts[2][0] != byte('@') {
-				if *debug {
-					log.Printf("invalid line '%s'\n", line)
-				}
-				output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-				continue
-			}
-			var err error
-			sampleRate, err = strconv.ParseFloat(string(parts[2])[1:], 32)
-			if err != nil {
-				if *debug {
-					log.Printf("invalid line '%s'\n", line)
-				}
-				output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-				continue
-			}
-		}
-		value, err := strconv.ParseFloat(string(parts[0]), 64)
-		if err != nil {
-			log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
-			output = append(output, &common.Metric{fmt.Sprintf("%sunit=Err.type=invalid_line", prefix_internal), float64(1), "c", float32(1)})
-			continue
-		}
-		packet := &common.Metric{
-			Bucket:   string(bucket),
-			Value:    value,
-			Modifier: modifier,
-			Sampling: float32(sampleRate),
-		}
-		output = append(output, packet)
 	}
 	return output
 }

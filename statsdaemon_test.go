@@ -89,7 +89,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
-	errors_key := "unit=Err.type=invalid_line"
+	errors_key := "target_type=count.type=invalid_line.unit=Err"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 2)
