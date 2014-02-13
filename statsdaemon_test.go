@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"github.com/bmizerany/assert"
+	"github.com/vimeo/statsdaemon/common"
+	"github.com/vimeo/statsdaemon/timer"
 	"math/rand"
 	"regexp"
 	"strconv"
@@ -101,10 +103,9 @@ func TestMean(t *testing.T) {
 	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
 	packets := parseMessage(d)
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value)
+	for _, p := range packets {
+		timer.Add(timers, p)
 	}
-
 	var buff bytes.Buffer
 	var num int64
 	num += processTimers(&buff, time.Now().Unix(), Percentiles{})
@@ -122,8 +123,8 @@ func TestUpperPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := parseMessage(d)
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value)
+	for _, p := range packets {
+		timer.Add(timers, p)
 	}
 
 	var buff bytes.Buffer
@@ -147,8 +148,8 @@ func TestLowerPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := parseMessage(d)
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value)
+	for _, p := range packets {
+		timer.Add(timers, p)
 	}
 
 	var buff bytes.Buffer
@@ -176,8 +177,8 @@ func BenchmarkManyDifferentSensors(t *testing.B) {
 	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := r.Float64()
-			timers[bucket] = append(timers[bucket], a)
+			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32()}
+			timer.Add(timers, m)
 		}
 	}
 
@@ -209,8 +210,8 @@ func BenchmarkOneBigTimer(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
 	bucket := "response_time"
 	for i := 0; i < 10000000; i++ {
-		a := r.Float64()
-		timers[bucket] = append(timers[bucket], a)
+		m := &common.Metric{bucket, r.Float64(), "ms", r.Float32()}
+		timer.Add(timers, m)
 	}
 
 	var buff bytes.Buffer
@@ -223,8 +224,8 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := r.Float64()
-			timers[bucket] = append(timers[bucket], a)
+			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32()}
+			timer.Add(timers, m)
 		}
 	}
 

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/vimeo/statsdaemon/common"
+	"github.com/vimeo/statsdaemon/timer"
 	"io"
 	"log"
 	"math"
@@ -30,29 +32,11 @@ const (
 
 var signalchan chan os.Signal
 
-type Packet struct {
-	Bucket   string
-	Value    float64
-	Modifier string
-	Sampling float32
-}
-
 // an amount of 1 per instance is imlpied
 type metricAmount struct {
 	Bucket   string
 	Sampling float32
 }
-
-type Float64Slice []float64
-
-type TimerData struct {
-	Points           Float64Slice
-	Amount_submitted int64
-}
-
-func (s Float64Slice) Len() int           { return len(s) }
-func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 type Percentiles []*Percentile
 type Percentile struct {
@@ -100,12 +84,12 @@ type metricsStatsReq struct {
 }
 
 var (
-	Metrics               = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+	Metrics               = make(chan *common.Metric, MAX_UNPROCESSED_PACKETS)
 	metricAmountCollector = make(chan metricAmount)
 	metricStatsRequests   = make(chan metricsStatsReq)
 	counters              = make(map[string]float64)
 	gauges                = make(map[string]float64)
-	timers                = make(map[string]TimerData)
+	timers                = make(map[string]timer.Data)
 )
 
 func metricsMonitor() {
@@ -130,15 +114,7 @@ func metricsMonitor() {
 			}
 		case s := <-Metrics:
 			if s.Modifier == "ms" {
-				_, ok := timers[s.Bucket]
-				if !ok {
-					var p Float64Slice
-					timers[s.Bucket] = TimerData{p, 0}
-				}
-				t := timers[s.Bucket]
-				t.Points = append(t.Points, s.Value)
-				t.Amount_submitted += int64(1 / s.Sampling)
-				timers[s.Bucket] = t
+				timer.Add(timers, s)
 			} else if s.Modifier == "g" {
 				gauges[s.Bucket] = s.Value
 			} else {
@@ -284,8 +260,8 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			} else {
 				median = (t.Points[mid-1] + t.Points[mid]) / 2
 			}
-			var cumulativeValues Float64Slice
-			cumulativeValues = make(Float64Slice, seen, seen)
+			var cumulativeValues timer.Float64Slice
+			cumulativeValues = make(timer.Float64Slice, seen, seen)
 			cumulativeValues[0] = t.Points[0]
 			for i := 1; i < seen; i++ {
 				cumulativeValues[i] = t.Points[i] + cumulativeValues[i-1]
@@ -331,8 +307,8 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				fmt.Fprintf(buffer, "%s%s.sum_%s %f %d\n", *prefix_timers, u, pctstr, sum_pct, now)
 			}
 
-			var z Float64Slice
-			timers[u] = TimerData{z, 0}
+			var z timer.Float64Slice
+			timers[u] = timer.Data{z, 0}
 
 			fmt.Fprintf(buffer, "%s%s.mean %f %d\n", *prefix_timers, u, mean, now)
 			fmt.Fprintf(buffer, "%s%s.median %f %d\n", *prefix_timers, u, median, now)
@@ -347,8 +323,8 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-func parseMessage(data []byte) []*Packet {
-	var output []*Packet
+func parseMessage(data []byte) []*common.Metric {
+	var output []*common.Metric
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		if len(line) == 0 {
 			continue
@@ -403,7 +379,7 @@ func parseMessage(data []byte) []*Packet {
 			log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
 			continue
 		}
-		packet := &Packet{
+		packet := &common.Metric{
 			Bucket:   string(bucket),
 			Value:    value,
 			Modifier: modifier,
@@ -495,7 +471,7 @@ func metricStatsMonitor() {
 				fmt.Fprintf(&resp, "%s %f %d\n", bucket, ideal_sample_rate, submitted_per_s)
 			case "metric_stats":
 				for bucket, el := range *prev_counts {
-					fmt.Fprintf(&resp, "%s %d %d\n", bucket, el.Submitted / 10, el.Seen / 10)
+					fmt.Fprintf(&resp, "%s %d %d\n", bucket, el.Submitted/10, el.Seen/10)
 				}
 			}
 
