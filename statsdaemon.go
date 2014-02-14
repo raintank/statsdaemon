@@ -210,9 +210,8 @@ func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		s = metrics2.Derive(s)
 		fmt.Fprintf(buffer, "%s%s %f %d\n", *prefix_rates, s, v, now)
 		num++
-		delete(counters, s)
 	}
-	//counters = make(map[string]float64) this should be better than deleting every single entry
+	counters = make(map[string]float64)
 	return num
 }
 
