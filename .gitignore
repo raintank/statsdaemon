@@ -1,2 +1,3 @@
 statsdaemon
-statsdaemon.test
+*.test
+*/*.test
