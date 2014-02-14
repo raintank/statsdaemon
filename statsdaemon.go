@@ -65,7 +65,7 @@ var (
 	admin_addr           = config.String("admin_addr", ":8126")
 	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval        = config.Int("flush_interval", 10)
-	instance             = config.String("instance", "default")
+	instance             = config.String("instance", "null")
 	prefix_rates         = config.String("prefix_rates", "stats.")
 	prefix_timers        = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges        = config.String("prefix_gauges", "stats.gauges.")
@@ -571,7 +571,17 @@ func adminListener() {
 		go handleApiRequest(conn, bytes.Buffer{})
 	}
 }
-
+func expand_cfg_vars(in string) (out string) {
+	switch in {
+	case "HOST":
+		hostname, _ := os.Hostname()
+		// in case hostname is an fqdn or has dots, only take first part
+		parts := strings.SplitN(hostname, ".", 2)
+		return parts[0]
+	default:
+		return ""
+	}
+}
 func main() {
 	flag.Parse()
 
@@ -600,7 +610,12 @@ func main() {
 	for _, pct := range pcts {
 		percentThreshold.Set(pct)
 	}
-	prefix_internal = "service=statsdaemon.instance=" + *instance + "."
+	inst := os.Expand(*instance, expand_cfg_vars)
+	if inst == "" {
+		inst = "null"
+	}
+	prefix_internal = "service=statsdaemon.instance=" + inst + "."
+	log.Printf("statsdaemon instance '%s' starting\n", inst)
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan)
