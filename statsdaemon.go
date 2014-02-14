@@ -160,14 +160,12 @@ func submit(deadline time.Time) error {
 
 	now := time.Now().Unix()
 
+	// TODO: in future, buffer up data (with a TTL/max size) and submit later
 	client, err := net.Dial("tcp", *graphite_addr)
 	if err != nil {
-		if *debug {
-			log.Printf("WARNING: resetting counters when in debug mode")
-			processCounters(&buffer, now, percentThreshold)
-			processGauges(&buffer, now, percentThreshold)
-			processTimers(&buffer, now, percentThreshold)
-		}
+		processCounters(&buffer, now, percentThreshold)
+		processGauges(&buffer, now, percentThreshold)
+		processTimers(&buffer, now, percentThreshold)
 		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err)
 		return errors.New(errmsg)
 	}
