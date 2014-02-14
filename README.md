@@ -7,7 +7,7 @@ Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go.
 * Counters (sampling supported)
 * Gauges
 
-They yield the exact same metrics as etsy's statsd (with legacy namespace),
+They yield the exact same metrics as etsy's statsd (with legacy namespace, and deleteGauges enabled),
 so it's meant as a drop-in replacement.
 Note: no support yet for histograms or sets (barely anyone uses them), but should be easy to add.
 
