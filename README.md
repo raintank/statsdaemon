@@ -2,14 +2,20 @@ statsdaemon
 ==========
 
 Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go.
+(Originally based on [Bitly's statsdaemon](https://github.com/bitly/statsdaemon)
+but heavily extended)
+
+Supports:
 
 * Timing (with optional percentiles, sampling supported)
 * Counters (sampling supported)
 * Gauges
 
-They yield the exact same metrics as etsy's statsd (with legacy namespace, and deleteGauges enabled),
+For a given input, this implementation yields the exact same metrics as etsy's statsd (with legacy namespace and deleteGauges enabled),
 so it's meant as a drop-in replacement.
 Note: no support yet for histograms or sets (barely anyone uses them), but should be easy to add.
+
+Upcoming features: automatic adaptive sampling and support for [metrics 2.0](http://dieter.plaetinck.be/metrics_2_a_proposal.html)
 
 [![Build Status](https://secure.travis-ci.org/Vimeo/statsdaemon.png)](http://travis-ci.org/Vimeo/statsdaemon)
 
