@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"github.com/bmizerany/assert"
 	"github.com/vimeo/statsdaemon/common"
+	"github.com/vimeo/statsdaemon/counter"
 	"github.com/vimeo/statsdaemon/timer"
 	"math/rand"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,6 +147,55 @@ func TestUpperPercentile(t *testing.T) {
 	meanRegexp := regexp.MustCompile(`time\.upper_75 2\.`)
 	matched := meanRegexp.MatchString(dataForGraphite)
 	assert.Equal(t, matched, true)
+}
+
+func TestMetrics20Timer(t *testing.T) {
+	d := []byte("foo=bar.target_type=gauge.unit=ms:5|ms\nfoo=bar.target_type=gauge.unit=ms:10|ms")
+	packets := parseMessage(d)
+
+	for _, p := range packets {
+		timer.Add(timers, p)
+	}
+
+	var buff bytes.Buffer
+	var num int64
+	num += processTimers(&buff, time.Now().Unix(), Percentiles{
+		&Percentile{
+			75,
+			"75",
+		},
+	})
+	dataForGraphite := buff.String()
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=upper_75 10.000000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean_75 7.500000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum_75 15.000000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean 7.500000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=median 7.500000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=std 2.500000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum 15.000000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=upper 10.000000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=lower 5.000000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.200000"))
+}
+func TestMetrics20Count(t *testing.T) {
+	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
+	packets := parseMessage(d)
+
+	for _, p := range packets {
+		counter.Add(counters, p)
+	}
+
+	var buff bytes.Buffer
+	var num int64
+	num += processCounters(&buff, time.Now().Unix(), Percentiles{
+		&Percentile{
+			75,
+			"75",
+		},
+	})
+	dataForGraphite := buff.String()
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Bps 1.5"))
 }
 
 func TestLowerPercentile(t *testing.T) {

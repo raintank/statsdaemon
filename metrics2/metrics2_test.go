@@ -5,26 +5,28 @@ import (
 	"testing"
 )
 
-func TestDerive(t *testing.T) {
-	assert.Equal(t, Derive("foo.bar.unit=yes.baz"), "foo.bar.unit=yesps.baz")
-	assert.Equal(t, Derive("foo.bar.unit=yes"), "foo.bar.unit=yesps")
-	assert.Equal(t, Derive("unit=yes.foo.bar"), "unit=yesps.foo.bar")
-	assert.Equal(t, Derive("foo.bar.unita=no.bar"), "foo.bar.unita=no.bar")
-	assert.Equal(t, Derive("foo.bar.aunit=no.baz"), "foo.bar.aunit=no.baz")
-	assert.Equal(t, Derive("foo.bar.UNIT=no.baz"), "foo.bar.UNIT=no.baz")
+func TestDerive_Count(t *testing.T) {
+	assert.Equal(t, Derive_Count("foo.bar.unit=yes.baz", "prefix."), "foo.bar.unit=yesps.baz")
+	assert.Equal(t, Derive_Count("foo.bar.unit=yes", "prefix."), "foo.bar.unit=yesps")
+	assert.Equal(t, Derive_Count("unit=yes.foo.bar", "prefix."), "unit=yesps.foo.bar")
+	assert.Equal(t, Derive_Count("foo.bar.unita=no.bar", "prefix."), "prefix.foo.bar.unita=no.bar")
+	assert.Equal(t, Derive_Count("foo.bar.aunit=no.baz", "prefix."), "prefix.foo.bar.aunit=no.baz")
+	assert.Equal(t, Derive_Count("foo.bar.UNIT=no.baz", "prefix."), "prefix.foo.bar.UNIT=no.baz")
 
-	assert.Equal(t, Derive("foo.bar.target_type=count.baz"), "foo.bar.target_type=rate.baz")
-	assert.Equal(t, Derive("foo.bar.target_type=count"), "foo.bar.target_type=rate")
-	assert.Equal(t, Derive("target_type=count.foo.bar"), "target_type=rate.foo.bar")
+	// only update target_type if we noticed it's metrics 2.0
+	assert.Equal(t, Derive_Count("foo.bar.target_type=count.baz", "prefix."), "prefix.foo.bar.target_type=count.baz")
+	assert.Equal(t, Derive_Count("foo.bar.target_type=count", "prefix."), "prefix.foo.bar.target_type=count")
+	assert.Equal(t, Derive_Count("target_type=count.foo.bar", "prefix."), "prefix.target_type=count.foo.bar")
+	assert.Equal(t, Derive_Count("target_type=count.foo.unit=ok.bar", "prefix."), "target_type=rate.foo.unit=okps.bar")
 
 }
 
-func BenchmarkManyDerives(t *testing.B) {
+func BenchmarkManyDerive_Counts(t *testing.B) {
 	for i := 0; i < 1000000; i++ {
-		Derive("foo.bar.unit=yes.baz")
-		Derive("foo.bar.unit=yes")
-		Derive("unit=yes.foo.bar")
-		Derive("foo.bar.unita=no.bar")
-		Derive("foo.bar.aunit=no.baz")
+		Derive_Count("foo.bar.unit=yes.baz", "prefix.")
+		Derive_Count("foo.bar.unit=yes", "prefix.")
+		Derive_Count("unit=yes.foo.bar", "prefix.")
+		Derive_Count("foo.bar.unita=no.bar", "prefix.")
+		Derive_Count("foo.bar.aunit=no.baz", "prefix.")
 	}
 }
