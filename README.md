@@ -67,8 +67,7 @@ Admin telnet api
 Internal metrics
 ================
 
-Statsdaemon submits a bunch of internal performance metrics;
-it does this using itself so the metrics are also subject to the chosen prefixes.
+Statsdaemon submits a bunch of internal performance metrics using itself.
 Note that these metrics are in the [metrics 2.0 format](http://dieter.plaetinck.be/metrics_2_a_proposal.html),
 they look a bit unusual but can be treated as regular graphite metrics if you want to.
 However using [carbon-tagger](https://github.com/vimeo/carbon-tagger) and [Graph-Explorer](http://vimeo.github.io/graph-explorer/)
