@@ -6,19 +6,16 @@ Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go.
 but heavily extended)
 
 
-features you'll expect:
+Features you expect:
 =======================
 
 For a given input, this implementation yields the exact same metrics as etsy's statsd (with legacy namespace and deleteGauges enabled),
-so it can act as a drop-in replacement.
-
-Supports:
+so it can act as a drop-in replacement.  In terms of types:
 
 * Timing (with optional percentiles, sampling supported)
 * Counters (sampling supported)
 * Gauges
-
-No support yet for histograms or sets (barely anyone uses them), but should be easy to add.
+* No histograms or sets yet, but should be easy to add if you want them
 
 
 Metrics 2.0
@@ -28,8 +25,8 @@ Metrics 2.0
 
 Metrics that flow through statsdaemon and are detected to be in the metrics 2.0 format undergo the same operations and aggregations, but how this is reflected in the resulting metric identifier is different:
 
-* legacy ("old school" statsd/graphite metrics) get unstandard prefixes and suffixes like the original statsd
-* metrics in 2.0 format will have the appropriate adjustments to their tags.  Statsdaemon assures that tags such as unit, target_type, stat, etcreflect the performed operation, according to the [specification](https://github.com/vimeo/graph-explorer/wiki/Consistent-tag-keys-and-values).
+* legacy ("old school" statsd/graphite metrics) get unclear and unstandard prefixes and suffixes like the original statsd
+* metrics in 2.0 format will have the appropriate adjustments to their tags.  Statsdaemon assures that tags such as unit, target_type, stat, etc reflect the performed operation, according to the [specification](https://github.com/vimeo/graph-explorer/wiki/Consistent-tag-keys-and-values).
 This allows users and advanced tools such as [Graph-Explorer](http://vimeo.github.io/graph-explorer/) to properly understand metrics and leverage them.
 
 
