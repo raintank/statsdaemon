@@ -29,7 +29,7 @@ import (
 const (
 	VERSION                 = "0.5.2-alpha"
 	MAX_UNPROCESSED_PACKETS = 1000
-	MAX_UDP_PACKET_SIZE     = 512
+	MAX_UDP_PACKET_SIZE     = 65535
 )
 
 var signalchan chan os.Signal
