@@ -98,6 +98,9 @@ var (
 	invalid_lines         = topic.New()
 )
 
+// metricsMonitor basically guards the metrics datastructures.
+// it typically receives metrics on the Metrics channel but also responds to
+// external signals and every flushInterval, computes and flushes the data
 func metricsMonitor() {
 	period := time.Duration(*flushInterval) * time.Second
 	ticker := time.NewTicker(period)
@@ -143,6 +146,8 @@ func metricsMonitor() {
 
 type processFn func(*bytes.Buffer, int64, Percentiles) int64
 
+// instrument wraps around a processing function, and makes sure we track the number of metrics and duration of the call,
+// which it flushes as metrics2.0 metrics to the outgoing buffer.
 func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentiles, name string) (num int64) {
 	time_start := time.Now()
 	num = fun(buffer, now, pctls)
@@ -153,6 +158,7 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 	return
 }
 
+// submit basically invokes the processing function (instrumented) and tries to buffer to graphite
 func submit(deadline time.Time) error {
 	var buffer bytes.Buffer
 	var num int64
@@ -202,6 +208,8 @@ func submit(deadline time.Time) error {
 	return nil
 }
 
+// processCounters computes the outbound metrics for counters, puts them in the buffer
+// and clears the datastructure
 func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for s, c := range counters {
@@ -213,6 +221,7 @@ func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
+// processGauges puts gauges in the outbound buffer and deactivates the gauges in the datastructure
 func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for g, c := range gauges {
@@ -226,6 +235,8 @@ func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
+// processTimers computes the outbound metrics for timers, puts them in the buffer
+// and deactivates their entries in the datastructure
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	// these are the metrics that get exposed:
 	// count estimate of original amount of metrics sent, by dividing received by samplerate
@@ -332,6 +343,8 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
+// parseLine turns a line into a *Metric (or not) and returns whether the line was valid.
+// note that *Metric can be nil when the line was valid (if the line was empty)
 func parseLine(line []byte) (metric *common.Metric, valid bool) {
 	if len(line) == 0 {
 		return nil, true
@@ -377,6 +390,9 @@ func parseLine(line []byte) (metric *common.Metric, valid bool) {
 	return metric, true
 }
 
+// parseMessage turns byte data into a slice of metric pointers
+// note that it creates "invalid line" metrics itself, upon invalid lines,
+// which will get passed on and aggregated along with the other metrics
 func parseMessage(data []byte) []*common.Metric {
 	var output []*common.Metric
 	for _, line := range bytes.Split(data, []byte("\n")) {
@@ -399,6 +415,8 @@ func parseMessage(data []byte) []*common.Metric {
 	return output
 }
 
+// udpListener receives packets from the udp buffer, parses them and feeds both the Metrics channel
+// as well as the metricAmountCollector channel
 func udpListener() {
 	address, _ := net.ResolveUDPAddr("udp", *listen_addr)
 	log.Printf("listening on %s", address)
@@ -430,6 +448,13 @@ type Amounts struct {
 	Seen      uint64
 }
 
+// metricsStatsMonitor basically maintains and guards the Amounts datastructures, and pulls
+// information out of it to satisfy requests.
+// we keep 2 10-second buffers, so that every 10 seconds we can restart filling one of them
+// (by reading from the metricAmountCollector channel),
+// while having another so that at any time we have at least 10 seconds worth of data (upto 20s)
+// upon incoming requests we use the "old" buffer and the new one for the timeperiod it applies to.
+// (this way we have the absolute latest information)
 func metricStatsMonitor() {
 	period := 10 * time.Second
 	ticker := time.NewTicker(period)
@@ -497,11 +522,17 @@ func writeHelp(conn net.Conn) {
         help                             show this menu
         metric_stats                     in the past 10s interval, for every metric show:
                                          <key> <Pckt/s sent (estim)> <Pckt/s received>
+        peek_invalid                     stream all invalid lines seen in real time
+                                         until you disconnect or can't keep up.
 
 `
 	conn.Write([]byte(help))
 }
 
+// handleApiRequest handles one or more api requests over the admin interface, to the extent it can.
+// some operations need to be performed by a Monitor, so we write the request into a channel along with
+// the connection.  the monitor will handle the request when it gets to it, and invoke this function again
+// so we can resume handling a request.
 func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 	write_first.WriteTo(conn)
 	// Make a buffer to hold incoming data.
