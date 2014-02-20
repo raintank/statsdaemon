@@ -61,6 +61,8 @@ Admin telnet api
         help                             show this menu
         metric_stats                     in the past 10s interval, for every metric show:
                                          <key> <Pckt/s sent (estim)> <Pckt/s received>
+        peek_invalid                     stream all invalid lines seen in real time
+                                         until you disconnect or can't keep up.
 ```
 
 

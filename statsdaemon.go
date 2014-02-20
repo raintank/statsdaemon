@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counter"
 	"github.com/vimeo/statsdaemon/metrics2"
@@ -94,6 +95,7 @@ var (
 	gauges                = make(map[string]float64)
 	timers                = make(map[string]timer.Data)
 	prefix_internal       string
+	invalid_lines         = topic.New()
 )
 
 func metricsMonitor() {
@@ -382,6 +384,7 @@ func parseMessage(data []byte) []*common.Metric {
 		if !valid {
 			if *debug {
 				log.Printf("invalid line '%s'\n", line)
+				invalid_lines.Broadcast <- line
 			}
 			metric = &common.Metric{
 				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
@@ -537,6 +540,13 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 			}
 			metricStatsRequests <- metricsStatsReq{command, &conn}
 			return
+		case "peek_invalid":
+			consumer := make(chan interface{}, 100)
+			invalid_lines.Register(consumer)
+			for line := range consumer {
+				conn.Write(line.([]byte))
+				conn.Write([]byte("\n"))
+			}
 		case "help":
 			writeHelp(conn)
 			continue
