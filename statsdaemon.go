@@ -10,6 +10,7 @@ import (
 	"github.com/vimeo/statsdaemon/counter"
 	"github.com/vimeo/statsdaemon/metrics2"
 	"github.com/vimeo/statsdaemon/timer"
+	"github.com/vimeo/statsdaemon/udp"
 	"io"
 	"log"
 	"math"
@@ -30,16 +31,9 @@ import (
 const (
 	VERSION                 = "0.5.2-alpha"
 	MAX_UNPROCESSED_PACKETS = 1000
-	MAX_UDP_PACKET_SIZE     = 65535
 )
 
 var signalchan chan os.Signal
-
-// an amount of 1 per instance is imlpied
-type metricAmount struct {
-	Bucket   string
-	Sampling float32
-}
 
 type Percentiles []*Percentile
 type Percentile struct {
@@ -89,7 +83,7 @@ type metricsStatsReq struct {
 
 var (
 	Metrics               = make(chan *common.Metric, MAX_UNPROCESSED_PACKETS)
-	metricAmountCollector = make(chan metricAmount)
+	metricAmountCollector = make(chan common.MetricAmount)
 	metricStatsRequests   = make(chan metricsStatsReq)
 	counters              = make(map[string]float64)
 	gauges                = make(map[string]float64)
@@ -343,108 +337,6 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-// parseLine turns a line into a *Metric (or not) and returns whether the line was valid.
-// note that *Metric can be nil when the line was valid (if the line was empty)
-func parseLine(line []byte) (metric *common.Metric, valid bool) {
-	if len(line) == 0 {
-		return nil, true
-	}
-	parts := bytes.SplitN(line, []byte(":"), 2)
-	if len(parts) != 2 {
-		return nil, false
-	}
-	if bytes.Contains(parts[1], []byte(":")) {
-		return nil, false
-	}
-	bucket := parts[0]
-	parts = bytes.SplitN(parts[1], []byte("|"), 3)
-	if len(parts) < 2 {
-		return nil, false
-	}
-	modifier := string(parts[1])
-	if modifier != "g" && modifier != "c" && modifier != "ms" {
-		return nil, false
-	}
-	sampleRate := float64(1)
-	if len(parts) == 3 {
-		if parts[2][0] != byte('@') {
-			return nil, false
-		}
-		var err error
-		sampleRate, err = strconv.ParseFloat(string(parts[2])[1:], 32)
-		if err != nil {
-			return nil, false
-		}
-	}
-	value, err := strconv.ParseFloat(string(parts[0]), 64)
-	if err != nil {
-		log.Printf("ERROR: failed to parse value in line '%s' - %s\n", line, err)
-		return nil, false
-	}
-	metric = &common.Metric{
-		Bucket:   string(bucket),
-		Value:    value,
-		Modifier: modifier,
-		Sampling: float32(sampleRate),
-	}
-	return metric, true
-}
-
-// parseMessage turns byte data into a slice of metric pointers
-// note that it creates "invalid line" metrics itself, upon invalid lines,
-// which will get passed on and aggregated along with the other metrics
-func parseMessage(data []byte) []*common.Metric {
-	var output []*common.Metric
-	for _, line := range bytes.Split(data, []byte("\n")) {
-		metric, valid := parseLine(line)
-		if !valid {
-			if *debug {
-				log.Printf("invalid line '%s'\n", line)
-				invalid_lines.Broadcast <- line
-			}
-			metric = &common.Metric{
-				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
-				float64(1),
-				"c",
-				float32(1)}
-		}
-		if metric != nil {
-			output = append(output, metric)
-		}
-	}
-	return output
-}
-
-// udpListener receives packets from the udp buffer, parses them and feeds both the Metrics channel
-// as well as the metricAmountCollector channel
-func udpListener() {
-	address, err := net.ResolveUDPAddr("udp", *listen_addr)
-	if err != nil {
-		log.Fatalf("ERROR: Cannot resolve '%s' - %s", *listen_addr, err)
-	}
-
-	listener, err := net.ListenUDP("udp", address)
-	if err != nil {
-		log.Fatalf("ERROR: ListenUDP - %s", err)
-	}
-	defer listener.Close()
-	log.Printf("listening on %s", address)
-
-	message := make([]byte, MAX_UDP_PACKET_SIZE)
-	for {
-		n, remaddr, err := listener.ReadFromUDP(message)
-		if err != nil {
-			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
-			continue
-		}
-
-		for _, p := range parseMessage(message[:n]) {
-			Metrics <- p
-			metricAmountCollector <- metricAmount{p.Bucket, p.Sampling}
-		}
-	}
-}
-
 // Amounts is a datastructure to track numbers of packets, in particular:
 // * Submitted is "triggered" inside statsd client libs, not necessarily sent
 // * Seen is the amount we see. I.e. after sampling, network loss and udp packet drops
@@ -658,8 +550,14 @@ func main() {
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan)
-
-	go udpListener()
+	if *debug {
+		consumer := make(chan interface{}, 100)
+		invalid_lines.Register(consumer)
+		for line := range consumer {
+			log.Printf("invalid line '%s'\n", line)
+		}
+	}
+	go udp.Listener(*listen_addr, prefix_internal, Metrics, metricAmountCollector, invalid_lines)
 	go adminListener()
 	go metricStatsMonitor()
 	metricsMonitor()

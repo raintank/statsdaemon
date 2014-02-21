@@ -6,6 +6,7 @@ import (
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counter"
 	"github.com/vimeo/statsdaemon/timer"
+	"github.com/vimeo/statsdaemon/udp"
 	"math/rand"
 	"regexp"
 	"strconv"
@@ -23,7 +24,7 @@ var commonPercentiles = Percentiles{
 
 func TestPacketParse(t *testing.T) {
 	d := []byte("gaugor:333|g")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet := packets[0]
 	assert.Equal(t, "gaugor", packet.Bucket)
@@ -32,7 +33,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gorets:2|c|@0.1")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -41,7 +42,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(0.1), packet.Sampling)
 
 	d = []byte("gorets:4|c")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -50,7 +51,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gorets:-4|c")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -59,7 +60,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("glork:320|ms")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "glork", packet.Bucket)
@@ -68,7 +69,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with-0.dash:4|c")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
@@ -77,7 +78,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 2)
 	packet = packets[0]
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
@@ -93,13 +94,13 @@ func TestPacketParse(t *testing.T) {
 
 	errors_key := "target_type=count.type=invalid_line.unit=Err"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 2)
 	assert.Equal(t, packets[0].Bucket, errors_key)
 	assert.Equal(t, packets[1].Bucket, errors_key)
 
 	d = []byte("a.key.with-0.dash:4")
-	packets = parseMessage(d)
+	packets = udp.ParseMessage(d, prefix_internal, nil)
 	assert.Equal(t, len(packets), 1)
 	assert.Equal(t, packets[0].Bucket, errors_key)
 }
@@ -107,7 +108,7 @@ func TestPacketParse(t *testing.T) {
 func TestMean(t *testing.T) {
 	// Some data with expected mean of 20
 	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 
 	for _, p := range packets {
 		timer.Add(timers, p)
@@ -127,7 +128,7 @@ func TestMean(t *testing.T) {
 func TestUpperPercentile(t *testing.T) {
 	// Some data with expected mean of 20
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 
 	for _, p := range packets {
 		timer.Add(timers, p)
@@ -151,7 +152,7 @@ func TestUpperPercentile(t *testing.T) {
 
 func TestMetrics20Timer(t *testing.T) {
 	d := []byte("foo=bar.target_type=gauge.unit=ms:5|ms\nfoo=bar.target_type=gauge.unit=ms:10|ms")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 
 	for _, p := range packets {
 		timer.Add(timers, p)
@@ -180,7 +181,7 @@ func TestMetrics20Timer(t *testing.T) {
 }
 func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 
 	for _, p := range packets {
 		counter.Add(counters, p)
@@ -201,7 +202,7 @@ func TestMetrics20Count(t *testing.T) {
 func TestLowerPercentile(t *testing.T) {
 	// Some data with expected mean of 20
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := parseMessage(d)
+	packets := udp.ParseMessage(d, prefix_internal, nil)
 
 	for _, p := range packets {
 		timer.Add(timers, p)
