@@ -70,7 +70,10 @@ func ParseMessage(data []byte, prefix_internal string, invalid_lines *topic.Topi
 		metric, err := ParseLine(line)
 		if err != nil {
 			if invalid_lines != nil {
-				invalid_lines.Broadcast <- line
+				// data will be repurposed by the udpListener
+				report_line := make([]byte, len(line), len(line))
+				copy(report_line, line)
+				invalid_lines.Broadcast <- report_line
 			}
 			metric = &common.Metric{
 				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
