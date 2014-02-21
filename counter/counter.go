@@ -4,6 +4,7 @@ import (
 	"github.com/vimeo/statsdaemon/common"
 )
 
+// Add updates the counters map, adding the metric key if needed
 func Add(counters map[string]float64, metric *common.Metric) {
 	_, ok := counters[metric.Bucket]
 	if !ok {

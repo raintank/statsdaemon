@@ -1,3 +1,7 @@
+// Package metrics2 provides functions that manipulate a metric string to represent a given operation
+// if the metric is detected to be in metrics 2.0 format, the change
+// will be in that style, if not, it will be a simple string prefix/postfix
+// like legacy statsd.
 package metrics2
 
 import (
@@ -14,11 +18,7 @@ func fix2(s string) {
 }
 */
 
-// the following functions change a metric string to represent a given operation
-// if the metric is detected to be in metrics 2.0 format, the change
-// will be in that style, if not, it will be a simple string prefix/postfix
-// like legacy statsd.
-
+// Derive_Count represents a derive from counter to rate per second
 func Derive_Count(metric_in, prefix string) (metric_out string) {
 	is_metric20 := false
 	parts := strings.Split(metric_in, ".")
@@ -37,6 +37,7 @@ func Derive_Count(metric_in, prefix string) (metric_out string) {
 	return
 }
 
+// is_metric20 is a simple function to see if the giving string is in metrics 2.0 format or not
 func is_metric20(metric_in string) bool {
 	if strings.Contains(metric_in, ".unit=") || strings.HasPrefix(metric_in, "unit=") {
 		return true
@@ -44,8 +45,7 @@ func is_metric20(metric_in string) bool {
 	return false
 }
 
-// metric 2.0: this operation doesn't really represent anything
-// metric 1.0: prepend prefix
+// Gauge doesn't really represent a change in data format, so for metrics 2.0 it doesn't change anything
 func Gauge(metric_in, prefix string) (metric_out string) {
 	if is_metric20(metric_in) {
 		return metric_in
@@ -53,6 +53,8 @@ func Gauge(metric_in, prefix string) (metric_out string) {
 	return prefix + metric_in
 }
 
+// simple_stat is a helper function to help express some common statistical aggregations using the stat tag
+// with an optional percentile
 func simple_stat(metric_in, prefix, stat, percentile string) (metric_out string) {
 	if percentile != "" {
 		percentile = "_" + percentile
