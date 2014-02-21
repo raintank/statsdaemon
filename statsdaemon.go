@@ -418,8 +418,12 @@ func parseMessage(data []byte) []*common.Metric {
 // udpListener receives packets from the udp buffer, parses them and feeds both the Metrics channel
 // as well as the metricAmountCollector channel
 func udpListener() {
-	address, _ := net.ResolveUDPAddr("udp", *listen_addr)
 	log.Printf("listening on %s", address)
+	address, err := net.ResolveUDPAddr("udp", *listen_addr)
+	if err != nil {
+		log.Fatalf("ERROR: Cannot resolve '%s' - %s", *listen_addr, err)
+	}
+
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
 		log.Fatalf("ERROR: ListenUDP - %s", err)
