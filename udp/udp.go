@@ -21,7 +21,7 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 	if len(line) == 0 {
 		return nil, nil
 	}
-	parts := bytes.SplitN(line, []byte(":"), 2)
+	parts := bytes.SplitN(bytes.TrimSpace(line), []byte(":"), 2)
 	if len(parts) != 2 {
 		return nil, errors.New("bad amount of colons")
 	}
