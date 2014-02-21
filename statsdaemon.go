@@ -445,8 +445,9 @@ func udpListener() {
 	}
 }
 
-// submitted is "triggered" inside statsd client libs, not necessarily sent
-// after sampling, network loss and udp packet drops, the amount we see is Seen
+// Amounts is a datastructure to track numbers of packets, in particular:
+// * Submitted is "triggered" inside statsd client libs, not necessarily sent
+// * Seen is the amount we see. I.e. after sampling, network loss and udp packet drops
 type Amounts struct {
 	Submitted uint64
 	Seen      uint64
