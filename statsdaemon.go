@@ -69,7 +69,7 @@ var (
 	percentThreshold     = Percentiles{}
 	max_timers_per_s     = config.Uint64("max_timers_per_s", 1000)
 
-	debug       = flag.Bool("debug", false, "print statistics sent to graphite")
+	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
 	showVersion = flag.Bool("version", false, "print version string")
 	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
 	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
@@ -449,7 +449,7 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 		clean_cmd := strings.TrimSpace(string(buf[:n]))
 		command := strings.Split(clean_cmd, " ")
 		if *debug {
-			fmt.Println("received command: '" + clean_cmd + "'")
+			log.Println("received command: '" + clean_cmd + "'")
 		}
 		switch command[0] {
 		case "sample_rate":
@@ -553,9 +553,11 @@ func main() {
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		invalid_lines.Register(consumer)
-		for line := range consumer {
-			log.Printf("invalid line '%s'\n", line)
-		}
+		go func() {
+			for line := range consumer {
+				log.Printf("invalid line '%s'\n", line)
+			}
+		}()
 	}
 	go udp.Listener(*listen_addr, prefix_internal, Metrics, metricAmountCollector, invalid_lines)
 	go adminListener()
