@@ -482,17 +482,21 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 		case "peek_invalid":
 			consumer := make(chan interface{}, 100)
 			invalid_lines.Register(consumer)
+			conn.(*net.TCPConn).SetNoDelay(false)
 			for line := range consumer {
 				conn.Write(line.([]byte))
 				conn.Write([]byte("\n"))
 			}
+			conn.(*net.TCPConn).SetNoDelay(true)
 		case "peek_valid":
 			consumer := make(chan interface{}, 100)
 			valid_lines.Register(consumer)
+			conn.(*net.TCPConn).SetNoDelay(false)
 			for line := range consumer {
 				conn.Write(line.([]byte))
 				conn.Write([]byte("\n"))
 			}
+			conn.(*net.TCPConn).SetNoDelay(true)
 		case "wait_flush":
 			consumer := make(chan interface{}, 10)
 			events.Register(consumer)
