@@ -379,7 +379,7 @@ func metricStatsMonitor() {
 				el.Seen += 1
 				el.Submitted += uint64(1 / s_a.Sampling)
 			} else {
-				(*cur_counts)[s_a.Bucket] = &Amounts{1, uint64(1 / s_a.Sampling)}
+				(*cur_counts)[s_a.Bucket] = &Amounts{uint64(1 / s_a.Sampling), 1}
 			}
 		case req := <-metricStatsRequests:
 			current_ts := time.Now()
@@ -397,16 +397,17 @@ func metricStatsMonitor() {
 				if ok {
 					submitted += el.Submitted
 				}
-				submitted_per_s := submitted / uint64(interval)
+				submitted_per_s := float64(submitted) / interval
 				// submitted (at source) per second * ideal_sample_rate should be ~= *max_timers_per_s
-				ideal_sample_rate := float32(1)
-				if submitted_per_s > *max_timers_per_s {
-					ideal_sample_rate = float32(*max_timers_per_s) / float32(submitted_per_s)
+				ideal_sample_rate := float64(1)
+				if uint64(submitted_per_s) > *max_timers_per_s {
+					ideal_sample_rate = float64(*max_timers_per_s) / submitted_per_s
 				}
-				fmt.Fprintf(&resp, "%s %f %d\n", bucket, ideal_sample_rate, submitted_per_s)
+				fmt.Fprintf(&resp, "%s %f %f\n", bucket, ideal_sample_rate, submitted_per_s)
+				// this needs to be less realtime, so for simplicity (and performance?) we just use the prev 10s bucket.
 			case "metric_stats":
 				for bucket, el := range *prev_counts {
-					fmt.Fprintf(&resp, "%s %d %d\n", bucket, el.Submitted/10, el.Seen/10)
+					fmt.Fprintf(&resp, "%s %f %f\n", bucket, float64(el.Submitted)/10, float64(el.Seen)/10)
 				}
 			}
 
