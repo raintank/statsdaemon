@@ -89,7 +89,10 @@ var (
 	gauges                = make(map[string]float64)
 	timers                = make(map[string]timer.Data)
 	prefix_internal       string
+	valid_lines           = topic.New()
 	invalid_lines         = topic.New()
+	// currently only used for flush
+	events                = topic.New()
 )
 
 // metricsMonitor basically guards the metrics datastructures.
@@ -115,6 +118,7 @@ func metricsMonitor() {
 			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
 			}
+			events.Broadcast <- "flush"
 		case s := <-Metrics:
 			var name string
 			if s.Modifier == "ms" {
@@ -414,13 +418,20 @@ func metricStatsMonitor() {
 func writeHelp(conn net.Conn) {
 	help := `
     commands:
+        help                             show this menu
         sample_rate <metric key>         for given metric, show:
                                          <key> <ideal sample rate> <Pckt/s sent (estim)>
-        help                             show this menu
         metric_stats                     in the past 10s interval, for every metric show:
                                          <key> <Pckt/s sent (estim)> <Pckt/s received>
+        peek_valid                       stream all valid lines seen in real time
+                                         until you disconnect or can't keep up.
         peek_invalid                     stream all invalid lines seen in real time
                                          until you disconnect or can't keep up.
+        wait_flush                       after the next flush, writes 'flush' and closes connection.
+                                         this is convenient to restart statsdaemon
+                                         with a minimal loss of data like so:
+                                         nc localhost 8126 <<< wait_flush && /sbin/restart statsdaemon
+
 
 `
 	conn.Write([]byte(help))
@@ -475,6 +486,21 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 				conn.Write(line.([]byte))
 				conn.Write([]byte("\n"))
 			}
+		case "peek_valid":
+			consumer := make(chan interface{}, 100)
+			valid_lines.Register(consumer)
+			for line := range consumer {
+				conn.Write(line.([]byte))
+				conn.Write([]byte("\n"))
+			}
+		case "wait_flush":
+			consumer := make(chan interface{}, 10)
+			events.Register(consumer)
+			ev := <-consumer
+			conn.Write([]byte(ev.(string)))
+			conn.Write([]byte("\n"))
+			conn.Close()
+			break
 		case "help":
 			writeHelp(conn)
 			continue
@@ -559,7 +585,7 @@ func main() {
 			}
 		}()
 	}
-	go udp.Listener(*listen_addr, prefix_internal, Metrics, metricAmountCollector, invalid_lines)
+	go udp.Listener(*listen_addr, prefix_internal, Metrics, metricAmountCollector, valid_lines, invalid_lines)
 	go adminListener()
 	go metricStatsMonitor()
 	metricsMonitor()

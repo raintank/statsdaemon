@@ -64,7 +64,7 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 // ParseMessage turns byte data into a slice of metric pointers
 // note that it creates "invalid line" metrics itself, upon invalid lines,
 // which will get passed on and aggregated along with the other metrics
-func ParseMessage(data []byte, prefix_internal string, invalid_lines *topic.Topic) []*common.Metric {
+func ParseMessage(data []byte, prefix_internal string, valid_lines, invalid_lines *topic.Topic) []*common.Metric {
 	var output []*common.Metric
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		metric, err := ParseLine(line)
@@ -80,6 +80,11 @@ func ParseMessage(data []byte, prefix_internal string, invalid_lines *topic.Topi
 				float64(1),
 				"c",
 				float32(1)}
+		} else {
+			// data will be repurposed by the udpListener
+			report_line := make([]byte, len(line), len(line))
+			copy(report_line, line)
+			valid_lines.Broadcast <- report_line
 		}
 		if metric != nil {
 			output = append(output, metric)
@@ -90,7 +95,7 @@ func ParseMessage(data []byte, prefix_internal string, invalid_lines *topic.Topi
 
 // Listener receives packets from the udp buffer, parses them and feeds both the Metrics channel
 // as well as the metricAmountCollector channel
-func Listener(listen_addr, prefix_internal string, Metrics chan *common.Metric, metricAmountCollector chan common.MetricAmount, invalid_lines *topic.Topic) {
+func Listener(listen_addr, prefix_internal string, Metrics chan *common.Metric, metricAmountCollector chan common.MetricAmount, valid_lines, invalid_lines *topic.Topic) {
 	address, err := net.ResolveUDPAddr("udp", listen_addr)
 	if err != nil {
 		log.Fatalf("ERROR: Cannot resolve '%s' - %s", listen_addr, err)
@@ -111,7 +116,7 @@ func Listener(listen_addr, prefix_internal string, Metrics chan *common.Metric, 
 			continue
 		}
 
-		for _, p := range ParseMessage(message[:n], prefix_internal, invalid_lines) {
+		for _, p := range ParseMessage(message[:n], prefix_internal, valid_lines, invalid_lines) {
 			Metrics <- p
 			metricAmountCollector <- common.MetricAmount{p.Bucket, p.Sampling}
 		}

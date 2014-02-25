@@ -57,13 +57,19 @@ Admin telnet api
 ================
 
 ```
+        help                             show this menu
         sample_rate <metric key>         for given metric, show:
                                          <key> <ideal sample rate> <Pckt/s sent (estim)>
-        help                             show this menu
         metric_stats                     in the past 10s interval, for every metric show:
                                          <key> <Pckt/s sent (estim)> <Pckt/s received>
+        peek_valid                       stream all valid lines seen in real time
+                                         until you disconnect or can't keep up.
         peek_invalid                     stream all invalid lines seen in real time
                                          until you disconnect or can't keep up.
+        wait_flush                       after the next flush, writes 'flush' and closes connection.
+                                         this is convenient to restart statsdaemon
+                                         with a minimal loss of data like so:
+                                         nc localhost 8126 <<< wait_flush && /sbin/restart statsdaemon
 ```
 
 
