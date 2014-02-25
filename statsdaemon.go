@@ -58,6 +58,7 @@ func (a *Percentiles) String() string {
 
 var (
 	listen_addr          = config.String("listen_addr", ":8125")
+	listen_archive_addr  = config.String("listen_archive_addr", ":8124")
 	admin_addr           = config.String("admin_addr", ":8126")
 	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval        = config.Int("flush_interval", 10)
@@ -82,17 +83,17 @@ type metricsStatsReq struct {
 }
 
 var (
-	Metrics               = make(chan *common.Metric, MAX_UNPROCESSED_PACKETS)
-	metricAmountCollector = make(chan common.MetricAmount)
-	metricStatsRequests   = make(chan metricsStatsReq)
-	counters              = make(map[string]float64)
-	gauges                = make(map[string]float64)
-	timers                = make(map[string]timer.Data)
-	prefix_internal       string
-	valid_lines           = topic.New()
-	invalid_lines         = topic.New()
+	Metrics             = make(chan *common.Metric, MAX_UNPROCESSED_PACKETS)
+	metricAmounts       = make(chan common.MetricAmount)
+	metricStatsRequests = make(chan metricsStatsReq)
+	counters            = make(map[string]float64)
+	gauges              = make(map[string]float64)
+	timers              = make(map[string]timer.Data)
+	prefix_internal     string
+	valid_lines         = topic.New()
+	invalid_lines       = topic.New()
 	// currently only used for flush
-	events                = topic.New()
+	events              = topic.New()
 )
 
 // metricsMonitor basically guards the metrics datastructures.
@@ -352,7 +353,7 @@ type Amounts struct {
 // metricsStatsMonitor basically maintains and guards the Amounts datastructures, and pulls
 // information out of it to satisfy requests.
 // we keep 2 10-second buffers, so that every 10 seconds we can restart filling one of them
-// (by reading from the metricAmountCollector channel),
+// (by reading from the metricAmounts channel),
 // while having another so that at any time we have at least 10 seconds worth of data (upto 20s)
 // upon incoming requests we use the "old" buffer and the new one for the timeperiod it applies to.
 // (this way we have the absolute latest information)
@@ -373,7 +374,7 @@ func metricStatsMonitor() {
 			new_counts := make(map[string]*Amounts)
 			cur_counts = &new_counts
 			swap_ts = time.Now()
-		case s_a := <-metricAmountCollector:
+		case s_a := <-metricAmounts:
 			el, ok := (*cur_counts)[s_a.Bucket]
 			if ok {
 				el.Seen += 1
@@ -590,7 +591,9 @@ func main() {
 			}
 		}()
 	}
-	go udp.Listener(*listen_addr, prefix_internal, Metrics, metricAmountCollector, valid_lines, invalid_lines)
+	output := &common.Output{Metrics, metricAmounts, valid_lines, invalid_lines}
+	go udp.StatsListener(*listen_addr, prefix_internal, output)
+	go udp.ArchiveStatsListener(*listen_archive_addr, prefix_internal, output)
 	go adminListener()
 	go metricStatsMonitor()
 	metricsMonitor()

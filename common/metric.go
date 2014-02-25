@@ -5,6 +5,8 @@ type Metric struct {
 	Value    float64
 	Modifier string
 	Sampling float32
+	//optional, only for "archive" metrics
+	Time uint32
 }
 
 // MetricAmount tracks amounts of metrics.

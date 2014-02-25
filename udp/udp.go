@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
 	"log"
 	"net"
@@ -17,6 +16,7 @@ const (
 
 // ParseLine turns a line into a *Metric (or not) and returns an error if the line was invalid.
 // note that *Metric can be nil when the line was valid (if the line was empty)
+// input format: key:value|modifier[|@samplerate]
 func ParseLine(line []byte) (metric *common.Metric, err error) {
 	if len(line) == 0 {
 		return nil, nil
@@ -61,41 +61,89 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 	return metric, nil
 }
 
+// ParseArchiveLine turns an "archive line" into an *Metric (or not) and returns an error if the line was invalid.
+// note that *Metric can be nil when the line was valid (if the line was empty)
+// input format: key value ts modifier [samplerate]
+func ParseArchiveLine(line []byte) (metric *common.Metric, err error) {
+	if len(line) == 0 {
+		return nil, nil
+	}
+	parts := bytes.SplitN(bytes.TrimSpace(line), []byte(" "), 6)
+	if len(parts) != 4 && len(parts) != 5 {
+		return nil, errors.New("incorrect amount of fields")
+	}
+	bucket := parts[0]
+	value, err := strconv.ParseFloat(string(parts[1]), 64)
+	if err != nil {
+		return nil, errors.New("couldn't parseFloat value")
+	}
+	ts, err := strconv.ParseUint(string(parts[2]), 32, 32)
+	modifier := string(parts[3])
+	if modifier != "g" && modifier != "c" && modifier != "ms" {
+		return nil, errors.New("unsupported metric type")
+	}
+	sampleRate := float64(1)
+	if len(parts) == 5 {
+		var err error
+		sampleRate, err = strconv.ParseFloat(string(parts[4]), 32)
+		if err != nil {
+			return nil, errors.New("couldn't parseFloat sampling")
+		}
+	}
+	metric = &common.Metric{
+		Bucket:   string(bucket),
+		Value:    value,
+		Modifier: modifier,
+		Sampling: float32(sampleRate),
+		Time:     uint32(ts),
+	}
+	return metric, nil
+}
+
 // ParseMessage turns byte data into a slice of metric pointers
 // note that it creates "invalid line" metrics itself, upon invalid lines,
 // which will get passed on and aggregated along with the other metrics
-func ParseMessage(data []byte, prefix_internal string, valid_lines, invalid_lines *topic.Topic) []*common.Metric {
-	var output []*common.Metric
+func ParseMessage(data []byte, prefix_internal string, output *common.Output, parse parseLineFunc) (metrics []*common.Metric) {
 	for _, line := range bytes.Split(data, []byte("\n")) {
-		metric, err := ParseLine(line)
+		metric, err := parse(line)
 		if err != nil {
-			if invalid_lines != nil {
-				// data will be repurposed by the udpListener
-				report_line := make([]byte, len(line), len(line))
-				copy(report_line, line)
-				invalid_lines.Broadcast <- report_line
-			}
+			// data will be repurposed by the udpListener
+			report_line := make([]byte, len(line), len(line))
+			copy(report_line, line)
+			output.Invalid_lines.Broadcast <- report_line
 			metric = &common.Metric{
 				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
 				float64(1),
 				"c",
-				float32(1)}
+				float32(1),
+				0,
+			}
 		} else {
 			// data will be repurposed by the udpListener
 			report_line := make([]byte, len(line), len(line))
 			copy(report_line, line)
-			valid_lines.Broadcast <- report_line
+			output.Valid_lines.Broadcast <- report_line
 		}
 		if metric != nil {
-			output = append(output, metric)
+			metrics = append(metrics, metric)
 		}
 	}
-	return output
+	return metrics
+}
+
+type parseLineFunc func(line []byte) (metric *common.Metric, err error)
+
+func StatsListener(listen_addr, prefix_internal string, output *common.Output) {
+	Listener(listen_addr, prefix_internal, output, ParseLine)
+}
+
+func ArchiveStatsListener(listen_addr, prefix_internal string, output *common.Output) {
+	Listener(listen_addr, prefix_internal, output, ParseArchiveLine)
 }
 
 // Listener receives packets from the udp buffer, parses them and feeds both the Metrics channel
-// as well as the metricAmountCollector channel
-func Listener(listen_addr, prefix_internal string, Metrics chan *common.Metric, metricAmountCollector chan common.MetricAmount, valid_lines, invalid_lines *topic.Topic) {
+// as well as the metricAmounts channel
+func Listener(listen_addr, prefix_internal string, output *common.Output, parse parseLineFunc) {
 	address, err := net.ResolveUDPAddr("udp", listen_addr)
 	if err != nil {
 		log.Fatalf("ERROR: Cannot resolve '%s' - %s", listen_addr, err)
@@ -116,9 +164,9 @@ func Listener(listen_addr, prefix_internal string, Metrics chan *common.Metric, 
 			continue
 		}
 
-		for _, p := range ParseMessage(message[:n], prefix_internal, valid_lines, invalid_lines) {
-			Metrics <- p
-			metricAmountCollector <- common.MetricAmount{p.Bucket, p.Sampling}
+		for _, p := range ParseMessage(message[:n], prefix_internal, output, parse) {
+			output.Metrics <- p
+			output.MetricAmounts <- common.MetricAmount{p.Bucket, p.Sampling}
 		}
 	}
 }
