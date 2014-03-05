@@ -453,11 +453,11 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 		if err != nil {
 			if err == io.EOF {
 				fmt.Println("read eof. closing")
-				conn.Close()
-				break
 			} else {
 				fmt.Println("Error reading:", err.Error())
 			}
+			conn.Close()
+			break
 		}
 		clean_cmd := strings.TrimSpace(string(buf[:n]))
 		command := strings.Split(clean_cmd, " ")
