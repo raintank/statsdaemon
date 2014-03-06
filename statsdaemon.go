@@ -198,9 +198,10 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("failed to write stats - %s", err)
 		return errors.New(errmsg)
 	}
+	if *debug {
+		log.Println("submit() successfully finished")
+	}
 
-	//fmt.Println("end of submit")
-	//fmt.Fprintf(&buffer, ...
 	return nil
 }
 
