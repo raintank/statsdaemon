@@ -93,7 +93,7 @@ var (
 	valid_lines         = topic.New()
 	invalid_lines       = topic.New()
 	// currently only used for flush
-	events              = topic.New()
+	events = topic.New()
 )
 
 // metricsMonitor basically guards the metrics datastructures.
