@@ -183,9 +183,6 @@ func submit(deadline time.Time) error {
 	num += instrument(processCounters, &buffer, now, percentThreshold, "counter")
 	num += instrument(processGauges, &buffer, now, percentThreshold, "gauge")
 	num += instrument(processTimers, &buffer, now, percentThreshold, "timer")
-	if num == 0 {
-		return nil
-	}
 
 	if *debug {
 		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
