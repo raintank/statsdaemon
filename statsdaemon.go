@@ -57,18 +57,18 @@ func (a *Percentiles) String() string {
 }
 
 var (
-	listen_addr          = config.String("listen_addr", ":8125")
-	listen_archive_addr  = config.String("listen_archive_addr", ":8124")
-	admin_addr           = config.String("admin_addr", ":8126")
-	graphite_addr        = config.String("graphite_addr", "127.0.0.1:2003")
-	flushInterval        = config.Int("flush_interval", 10)
-	instance             = config.String("instance", "null")
-	prefix_rates         = config.String("prefix_rates", "stats.")
-	prefix_timers        = config.String("prefix_timers", "stats.timers.")
-	prefix_gauges        = config.String("prefix_gauges", "stats.gauges.")
-	percentile_tresholds = config.String("percentile_tresholds", "")
-	percentThreshold     = Percentiles{}
-	max_timers_per_s     = config.Uint64("max_timers_per_s", 1000)
+	listen_addr           = config.String("listen_addr", ":8125")
+	listen_archive_addr   = config.String("listen_archive_addr", ":8124")
+	admin_addr            = config.String("admin_addr", ":8126")
+	graphite_addr         = config.String("graphite_addr", "127.0.0.1:2003")
+	flushInterval         = config.Int("flush_interval", 10)
+	instance              = config.String("instance", "null")
+	prefix_rates          = config.String("prefix_rates", "stats.")
+	prefix_timers         = config.String("prefix_timers", "stats.timers.")
+	prefix_gauges         = config.String("prefix_gauges", "stats.gauges.")
+	percentile_thresholds = config.String("percentile_thresholds", "")
+	percentThreshold      = Percentiles{}
+	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
 
 	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
 	showVersion = flag.Bool("version", false, "print version string")
@@ -567,7 +567,7 @@ func main() {
 		defer pprof.WriteHeapProfile(f)
 	}
 	config.Parse(*config_file)
-	pcts := strings.Split(*percentile_tresholds, ",")
+	pcts := strings.Split(*percentile_thresholds, ",")
 	for _, pct := range pcts {
 		percentThreshold.Set(pct)
 	}
