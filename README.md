@@ -41,7 +41,7 @@ You'll love Go
 ==============
 
 Perhaps debatable and prone to personal opinion, but people seem to agree that Go is more robust, easier to deploy and elegant than node.js.
-In terms of performance, I didn't do extensive or scienticific benchmarking but here's the effect on our cpu usage and calculation time when switching from statsd to statsdaemon, with the same input load and the same things being calculated:
+In terms of performance, I didn't do extensive or scientific benchmarking but here's the effect on our cpu usage and calculation time when switching from statsd to statsdaemon, with the same input load and the same things being calculated:
 
 ![Performance](https://raw.github.com/vimeo/statsdaemon/master/img/statsd-to-statsdaemon-switch.png)
 
