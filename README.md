@@ -49,7 +49,7 @@ In terms of performance, I didn't do extensive or scientific benchmarking but he
 
 
 
-[![Build Status](https://secure.travis-ci.org/Vimeo/statsdaemon.png)](http://travis-ci.org/Vimeo/statsdaemon)
+[![Build Status](https://secure.travis-ci.org/vimeo/statsdaemon.png)](http://travis-ci.org/vimeo/statsdaemon)
 [![GoDoc](https://godoc.org/github.com/vimeo/statsdaemon?status.png)](https://godoc.org/github.com/vimeo/statsdaemon)
 
 
