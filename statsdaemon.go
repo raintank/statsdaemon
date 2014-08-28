@@ -64,6 +64,7 @@ var (
 	flushInterval         = config.Int("flush_interval", 10)
 	instance              = config.String("instance", "null")
 	prefix_rates          = config.String("prefix_rates", "stats.")
+	prefix_count          = config.String("prefix_count", "stats_count.")
 	prefix_timers         = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges         = config.String("prefix_gauges", "stats.gauges.")
 	percentile_thresholds = config.String("percentile_thresholds", "")
@@ -210,6 +211,7 @@ func submit(deadline time.Time) error {
 func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for s, c := range counters {
+		fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Derive_Count(s, *prefix_count), c, now)
 		v := c / float64(*flushInterval)
 		fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Derive_Count(s, *prefix_rates), v, now)
 		num++
