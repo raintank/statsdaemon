@@ -107,13 +107,13 @@ func metricsMonitor() {
 		case sig := <-signalchan:
 			switch sig {
 			case syscall.SIGTERM, syscall.SIGINT:
-				fmt.Printf("!! Caught signal %d... shutting down\n", sig)
+				fmt.Printf("!! Caught signal %s... shutting down\n", sig)
 				if err := submit(time.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
 				}
 				return
 			default:
-				fmt.Printf("unknown signal %d, ignoring\n", sig)
+				fmt.Printf("unknown signal %s, ignoring\n", sig)
 			}
 		case <-ticker.C:
 			if err := submit(time.Now().Add(period)); err != nil {
@@ -170,14 +170,14 @@ func submit(deadline time.Time) error {
 		processCounters(&buffer, now, percentThreshold)
 		processGauges(&buffer, now, percentThreshold)
 		processTimers(&buffer, now, percentThreshold)
-		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err)
+		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err.Error())
 		return errors.New(errmsg)
 	}
 	defer client.Close()
 
 	err = client.SetDeadline(deadline)
 	if err != nil {
-		errmsg := fmt.Sprintf("could not set deadline:", err)
+		errmsg := fmt.Sprintf("could not set deadline - %s", err.Error())
 		return errors.New(errmsg)
 	}
 	num += instrument(processCounters, &buffer, now, percentThreshold, "counter")
