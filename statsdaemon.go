@@ -160,7 +160,6 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 // submit basically invokes the processing function (instrumented) and tries to buffer to graphite
 func submit(deadline time.Time) error {
 	var buffer bytes.Buffer
-	var num int64
 
 	now := time.Now().Unix()
 
@@ -180,9 +179,9 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("could not set deadline - %s", err.Error())
 		return errors.New(errmsg)
 	}
-	num += instrument(processCounters, &buffer, now, percentThreshold, "counter")
-	num += instrument(processGauges, &buffer, now, percentThreshold, "gauge")
-	num += instrument(processTimers, &buffer, now, percentThreshold, "timer")
+	instrument(processCounters, &buffer, now, percentThreshold, "counter")
+	instrument(processGauges, &buffer, now, percentThreshold, "gauge")
+	instrument(processTimers, &buffer, now, percentThreshold, "timer")
 
 	if *debug {
 		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
