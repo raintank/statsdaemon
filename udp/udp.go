@@ -137,7 +137,7 @@ func ParseMessage(data []byte, prefix_internal string, output *common.Output, pa
 type parseLineFunc func(line []byte) (metric *common.Metric, err error)
 
 func StatsListener(listen_addr, prefix_internal string, output *common.Output) {
-	Listener(listen_addr, prefix_internal, output, ParseLine)
+	Listener(listen_addr, prefix_internal, output, ParseLine2)
 }
 
 func ArchiveStatsListener(listen_addr, prefix_internal string, output *common.Output) {
