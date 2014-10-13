@@ -29,6 +29,9 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 		return nil, errors.New("bad amount of colons")
 	}
 	bucket := parts[0]
+	if len(bucket) == 0 {
+		return nil, errors.New("key zero len")
+	}
 	parts = bytes.SplitN(parts[1], []byte("|"), 3)
 	if len(parts) < 2 {
 		return nil, errors.New("bad amount of pipes")
@@ -45,12 +48,12 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 		var err error
 		sampleRate, err = strconv.ParseFloat(string(parts[2])[1:], 32)
 		if err != nil {
-			return nil, errors.New("couldn't parseFloat sampling")
+			return nil, err
 		}
 	}
 	value, err := strconv.ParseFloat(string(parts[0]), 64)
 	if err != nil {
-		return nil, errors.New("couldn't parseFloat value")
+		return nil, err
 	}
 	metric = &common.Metric{
 		Bucket:   string(bucket),
