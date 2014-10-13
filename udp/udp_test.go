@@ -28,30 +28,30 @@ func runTest(t *testing.T, f func([]byte) (*common.Metric, error)) {
 			},
 			nil,
 		},
-        /*
-		Case{
-			"counter-int-simple-trailing-white",
-			"cliapp1.queue.consumer.VideoFile_PruneSourceFilesV6.processing.10_90_128_162.removed:1|c  ",
-			&common.Metric{
-				Bucket:   "cliapp1.queue.consumer.VideoFile_PruneSourceFilesV6.processing.10_90_128_162.removed",
-				Value:    1,
-				Modifier: "c",
-				Sampling: float32(1),
+		/*
+			Case{
+				"counter-int-simple-trailing-white",
+				"cliapp1.queue.consumer.VideoFile_PruneSourceFilesV6.processing.10_90_128_162.removed:1|c  ",
+				&common.Metric{
+					Bucket:   "cliapp1.queue.consumer.VideoFile_PruneSourceFilesV6.processing.10_90_128_162.removed",
+					Value:    1,
+					Modifier: "c",
+					Sampling: float32(1),
+				},
+				nil,
 			},
-			nil,
-		},
-		Case{
-			"  timing-float-with-samplerate-prefix-whitespace",
-			"lvimdfs3.object-replicator.partition.update.timing:3.69596481323|ms|@0.05",
-			&common.Metric{
-				Bucket:   "lvimdfs3.object-replicator.partition.update.timing",
-				Value:    3.69596481323,
-				Modifier: "ms",
-				Sampling: float32(0.05),
+			Case{
+				"  timing-float-with-samplerate-prefix-whitespace",
+				"lvimdfs3.object-replicator.partition.update.timing:3.69596481323|ms|@0.05",
+				&common.Metric{
+					Bucket:   "lvimdfs3.object-replicator.partition.update.timing",
+					Value:    3.69596481323,
+					Modifier: "ms",
+					Sampling: float32(0.05),
+				},
+				nil,
 			},
-			nil,
-		},
-        */
+		*/
 		Case{
 			"funky-chars",
 			"foo%bar=yes:12|ms|@0.05",
