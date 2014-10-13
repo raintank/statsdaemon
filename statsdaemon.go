@@ -62,6 +62,7 @@ var (
 	admin_addr            = config.String("admin_addr", ":8126")
 	graphite_addr         = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval         = config.Int("flush_interval", 10)
+	processes             = config.Int("processes", 1)
 	instance              = config.String("instance", "null")
 	prefix_rates          = config.String("prefix_rates", "stats.")
 	prefix_timers         = config.String("prefix_timers", "stats.timers.")
@@ -566,6 +567,7 @@ func main() {
 		defer pprof.WriteHeapProfile(f)
 	}
 	config.Parse(*config_file)
+	runtime.GOMAXPROCS(*processes)
 	pcts := strings.Split(*percentile_thresholds, ",")
 	for _, pct := range pcts {
 		percentThreshold.Set(pct)
