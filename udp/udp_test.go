@@ -28,6 +28,7 @@ func runTest(t *testing.T, f func([]byte) (*common.Metric, error)) {
 			},
 			nil,
 		},
+        /*
 		Case{
 			"counter-int-simple-trailing-white",
 			"cliapp1.queue.consumer.VideoFile_PruneSourceFilesV6.processing.10_90_128_162.removed:1|c  ",
@@ -50,6 +51,7 @@ func runTest(t *testing.T, f func([]byte) (*common.Metric, error)) {
 			},
 			nil,
 		},
+        */
 		Case{
 			"funky-chars",
 			"foo%bar=yes:12|ms|@0.05",
