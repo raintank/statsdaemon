@@ -449,9 +449,9 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
-				fmt.Println("read eof. closing")
+				fmt.Println("[api] read eof. closing")
 			} else {
-				fmt.Println("Error reading:", err.Error())
+				fmt.Println("[api] Error reading:", err.Error())
 			}
 			conn.Close()
 			break
@@ -459,7 +459,7 @@ func handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
 		clean_cmd := strings.TrimSpace(string(buf[:n]))
 		command := strings.Split(clean_cmd, " ")
 		if *debug {
-			log.Println("received command: '" + clean_cmd + "'")
+			log.Println("[api] received command: '" + clean_cmd + "'")
 		}
 		switch command[0] {
 		case "sample_rate":
