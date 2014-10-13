@@ -42,7 +42,7 @@ func printInvalid(path string) {
 			}
 			// every packet starts with 2 spaces, but that's ok: parseLine strips space anyway
 			// also, ngrep output sometimes seems to contain whitespace at the end, but parseLine does that as well.
-			_, err := udp.ParseLine(line)
+			_, err := udp.ParseLine2(line)
 			if err != nil {
 				fmt.Println(string(bytes.TrimSpace(line)), err)
 			}
