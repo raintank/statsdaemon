@@ -193,13 +193,24 @@ func submit(deadline time.Time) error {
 		}
 	}
 
+	time_start := time.Now()
 	_, err = client.Write(buffer.Bytes())
 	if err != nil {
 		errmsg := fmt.Sprintf("failed to write stats - %s", err)
 		return errors.New(errmsg)
 	}
+	time_end := time.Now()
+	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
 	if *debug {
 		log.Println("submit() successfully finished")
+	}
+
+	buffer.Reset()
+	fmt.Fprintf(&buffer, "%starget_type=gauge.type=send.unit=ms %f %d\n", prefix_internal, duration_ms, now)
+	_, err = client.Write(buffer.Bytes())
+	if err != nil {
+		errmsg := fmt.Sprintf("failed to write target_type=gauge.type=send.unit=ms - %s", err)
+		return errors.New(errmsg)
 	}
 
 	return nil
