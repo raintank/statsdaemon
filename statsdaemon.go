@@ -581,7 +581,13 @@ func main() {
 	runtime.GOMAXPROCS(*processes)
 	pcts := strings.Split(*percentile_thresholds, ",")
 	for _, pct := range pcts {
-		percentThreshold.Set(pct)
+		if pct == "" {
+			continue
+		}
+		err := percentThreshold.Set(pct)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	inst := os.Expand(*instance, expand_cfg_vars)
 	if inst == "" {
