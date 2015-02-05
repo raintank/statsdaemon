@@ -8,7 +8,7 @@ Metrics aggregation daemon like [statsd](https://github.com/etsy/statsd), in Go 
 Features you expect:
 =======================
 
-For a given input, this implementation yields the exact same metrics as etsy's statsd (with legacy namespace and deleteGauges enabled),
+For a given input, this implementation yields the exact same metrics as etsy's statsd (with legacy namespace and deleteIdleStats enabled),
 so it can act as a drop-in replacement.  In terms of types:
 
 * Timing (with optional percentiles, sampling supported)
