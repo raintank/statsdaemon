@@ -133,7 +133,7 @@ func metricsMonitor() {
 				counter.Add(counters, s)
 				name = "counter"
 			}
-			k := fmt.Sprintf("%sdirection=in.statsd_type=%s.target_type=count.unit=Metric", prefix_internal, name)
+			k := fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name)
 			_, ok := counters[k]
 			if !ok {
 				counters[k] = 1
@@ -153,8 +153,8 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 	num = fun(buffer, now, pctls)
 	time_end := time.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	fmt.Fprintf(buffer, "%sstatsd_type=%s.target_type=gauge.type=calculation.unit=ms %f %d\n", prefix_internal, name, duration_ms, now)
-	fmt.Fprintf(buffer, "%sdirection=out.statsd_type=%s.target_type=rate.unit=Metricps %f %d\n", prefix_internal, name, float64(num)/float64(*flushInterval), now)
+	fmt.Fprintf(buffer, "%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms %f %d\n", prefix_internal, name, duration_ms, now)
+	fmt.Fprintf(buffer, "%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps %f %d\n", prefix_internal, name, float64(num)/float64(*flushInterval), now)
 	return
 }
 
@@ -206,10 +206,10 @@ func submit(deadline time.Time) error {
 	}
 
 	buffer.Reset()
-	fmt.Fprintf(&buffer, "%starget_type=gauge.type=send.unit=ms %f %d\n", prefix_internal, duration_ms, now)
+	fmt.Fprintf(&buffer, "%starget_type_is_gauge.type_is_send.unit_is_ms %f %d\n", prefix_internal, duration_ms, now)
 	_, err = client.Write(buffer.Bytes())
 	if err != nil {
-		errmsg := fmt.Sprintf("failed to write target_type=gauge.type=send.unit=ms - %s", err)
+		errmsg := fmt.Sprintf("failed to write target_type_is_gauge.type_is_send.unit_is_ms - %s", err)
 		return errors.New(errmsg)
 	}
 
@@ -593,7 +593,7 @@ func main() {
 	if inst == "" {
 		inst = "null"
 	}
-	prefix_internal = "service=statsdaemon.instance=" + inst + "."
+	prefix_internal = "service_is_statsdaemon.instance_is_" + inst + "."
 	log.Printf("statsdaemon instance '%s' starting\n", inst)
 
 	signalchan = make(chan os.Signal, 1)
