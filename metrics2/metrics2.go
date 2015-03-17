@@ -18,31 +18,45 @@ func fix2(s string) {
 }
 */
 
+type metricVersion int
+
+const (
+	legacy metricVersion = iota
+	m20
+	m20NoEquals
+)
+
+func getVersion(metric_in string) metricVersion {
+	if strings.Contains(metric_in, "unit=") {
+		return m20
+	}
+	if strings.Contains(metric_in, "unit_is_") {
+		return m20NoEquals
+	}
+	return legacy
+}
+
+func is_metric20(metric_in string) bool {
+	v := getVersion(metric_in)
+	return v == m20 || v == m20NoEquals
+}
+
 // Derive_Count represents a derive from counter to rate per second
 func Derive_Count(metric_in, prefix string) (metric_out string) {
-	is_metric20 := false
-	parts := strings.Split(metric_in, ".")
-	for i, part := range parts {
-		if strings.HasPrefix(part, "unit=") {
-			parts[i] = part + "ps"
-			is_metric20 = true
+	if is_metric20(metric_in) {
+		parts := strings.Split(metric_in, ".")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "unit=") || strings.HasPrefix(part, "unit_is_") {
+				parts[i] = part + "ps"
+			}
 		}
-	}
-	if is_metric20 {
 		metric_out = strings.Join(parts, ".")
 		metric_out = strings.Replace(metric_out, "target_type=count", "target_type=rate", 1)
+		metric_out = strings.Replace(metric_out, "target_type_is_count", "target_type_is_rate", 1)
 	} else {
 		metric_out = prefix + metric_in
 	}
 	return
-}
-
-// is_metric20 is a simple function to see if the giving string is in metrics 2.0 format or not
-func is_metric20(metric_in string) bool {
-	if strings.Contains(metric_in, ".unit=") || strings.HasPrefix(metric_in, "unit=") {
-		return true
-	}
-	return false
 }
 
 // Gauge doesn't really represent a change in data format, so for metrics 2.0 it doesn't change anything
@@ -59,8 +73,12 @@ func simple_stat(metric_in, prefix, stat, percentile string) (metric_out string)
 	if percentile != "" {
 		percentile = "_" + percentile
 	}
-	if is_metric20(metric_in) {
+	v := getVersion(metric_in)
+	if v == m20 {
 		return metric_in + ".stat=" + stat + percentile
+	}
+	if v == m20NoEquals {
+		return metric_in + ".stat_is_" + stat + percentile
 	}
 	return prefix + metric_in + "." + stat + percentile
 }
@@ -90,22 +108,34 @@ func Std(metric_in, prefix string, percentile string) (metric_out string) {
 }
 
 func Count_Pckt(metric_in, prefix string) (metric_out string) {
-	is_metric20 := false
-	parts := strings.Split(metric_in, ".")
-	for i, part := range parts {
-		if strings.HasPrefix(part, "unit=") {
-			is_metric20 = true
-			parts[i] = "unit=Pckt"
-			parts = append(parts, "orig_unit="+part[5:])
+	v := getVersion(metric_in)
+	if v == m20 {
+		parts := strings.Split(metric_in, ".")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "unit=") {
+				parts[i] = "unit=Pckt"
+				parts = append(parts, "orig_unit="+part[5:])
+			}
+			if strings.HasPrefix(part, "target_type=") {
+				parts[i] = "target_type=count"
+			}
 		}
-		if strings.HasPrefix(part, "target_type=") {
-			is_metric20 = true
-			parts[i] = "target_type=count"
-		}
-	}
-	if is_metric20 {
 		parts = append(parts, "pckt_type=sent")
 		parts = append(parts, "direction=in")
+		metric_out = strings.Join(parts, ".")
+	} else if v == m20NoEquals {
+		parts := strings.Split(metric_in, ".")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "unit_is_") {
+				parts[i] = "unit_is_Pckt"
+				parts = append(parts, "orig_unit_is_"+part[8:])
+			}
+			if strings.HasPrefix(part, "target_type_is_") {
+				parts[i] = "target_type_is_count"
+			}
+		}
+		parts = append(parts, "pckt_type_is_sent")
+		parts = append(parts, "direction_is_in")
 		metric_out = strings.Join(parts, ".")
 	} else {
 		metric_out = prefix + metric_in + ".count"
@@ -114,22 +144,34 @@ func Count_Pckt(metric_in, prefix string) (metric_out string) {
 }
 
 func Rate_Pckt(metric_in, prefix string) (metric_out string) {
-	is_metric20 := false
-	parts := strings.Split(metric_in, ".")
-	for i, part := range parts {
-		if strings.HasPrefix(part, "unit=") {
-			is_metric20 = true
-			parts[i] = "unit=Pcktps"
-			parts = append(parts, "orig_unit="+part[5:])
+	v := getVersion(metric_in)
+	if v == m20 {
+		parts := strings.Split(metric_in, ".")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "unit=") {
+				parts[i] = "unit=Pcktps"
+				parts = append(parts, "orig_unit="+part[5:])
+			}
+			if strings.HasPrefix(part, "target_type=") {
+				parts[i] = "target_type=rate"
+			}
 		}
-		if strings.HasPrefix(part, "target_type=") {
-			is_metric20 = true
-			parts[i] = "target_type=rate"
-		}
-	}
-	if is_metric20 {
 		parts = append(parts, "pckt_type=sent")
 		parts = append(parts, "direction=in")
+		metric_out = strings.Join(parts, ".")
+	} else if v == m20NoEquals {
+		parts := strings.Split(metric_in, ".")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "unit_is_") {
+				parts[i] = "unit_is_Pcktps"
+				parts = append(parts, "orig_unit_is_"+part[8:])
+			}
+			if strings.HasPrefix(part, "target_type_is_") {
+				parts[i] = "target_type_is_rate"
+			}
+		}
+		parts = append(parts, "pckt_type_is_sent")
+		parts = append(parts, "direction_is_in")
 		metric_out = strings.Join(parts, ".")
 	} else {
 		metric_out = prefix + metric_in + ".count_ps"
