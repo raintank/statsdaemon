@@ -8,7 +8,7 @@ import (
 	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counter"
-	"github.com/vimeo/statsdaemon/metrics2"
+	m20 "github.com/metrics20/go-metrics20"
 	"github.com/vimeo/statsdaemon/timer"
 	"github.com/vimeo/statsdaemon/udp"
 	"io"
@@ -222,7 +222,7 @@ func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for s, c := range counters {
 		v := c / float64(*flushInterval)
-		fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Derive_Count(s, *prefix_rates), v, now)
+		fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(s, *prefix_rates), v, now)
 		num++
 	}
 	counters = make(map[string]float64)
@@ -236,7 +236,7 @@ func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		if c == math.MaxUint64 {
 			continue
 		}
-		fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Gauge(g, *prefix_gauges), c, now)
+		fmt.Fprintf(buffer, "%s %f %d\n", m20.Gauge(g, *prefix_gauges), c, now)
 		gauges[g] = math.MaxUint64
 		num++
 	}
@@ -322,30 +322,30 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				}
 
 				var pctstr string
-				var fn func(metric_in, prefix, percentile string) string
+				var fn func(metric_in, prefix, percentile, timespec string) string
 				if pct.float >= 0 {
 					pctstr = pct.str
-					fn = metrics2.Upper
+					fn = m20.Max
 				} else {
 					pctstr = pct.str[1:]
-					fn = metrics2.Lower
+					fn = m20.Min
 				}
-				fmt.Fprintf(buffer, "%s %f %d\n", fn(u, *prefix_timers, pctstr), maxAtThreshold, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Mean(u, *prefix_timers, pctstr), mean_pct, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Sum(u, *prefix_timers, pctstr), sum_pct, now)
+				fmt.Fprintf(buffer, "%s %f %d\n", fn(u, *prefix_timers, pctstr, ""), maxAtThreshold, now)
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, *prefix_timers, pctstr, ""), mean_pct, now)
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, *prefix_timers, pctstr, ""), sum_pct, now)
 			}
 
 			var z timer.Float64Slice
 			timers[u] = timer.Data{z, 0}
 
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Mean(u, *prefix_timers, ""), mean, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Median(u, *prefix_timers, ""), median, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Std(u, *prefix_timers, ""), stddev, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Sum(u, *prefix_timers, ""), sum, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Upper(u, *prefix_timers, ""), max, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Lower(u, *prefix_timers, ""), min, now)
-			fmt.Fprintf(buffer, "%s %d %d\n", metrics2.Count_Pckt(u, *prefix_timers), count, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", metrics2.Rate_Pckt(u, *prefix_timers), count_ps, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, *prefix_timers, "", ""), mean, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Median(u, *prefix_timers, "", ""), median, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Std(u, *prefix_timers, "", ""), stddev, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, *prefix_timers, "", ""), sum, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Max(u, *prefix_timers, "", ""), max, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Min(u, *prefix_timers, "", ""), min, now)
+			fmt.Fprintf(buffer, "%s %d %d\n", m20.CountPckt(u, *prefix_timers), count, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.RatePckt(u, *prefix_timers), count_ps, now)
 		}
 	}
 	return num
