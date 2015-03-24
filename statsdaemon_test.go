@@ -93,7 +93,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
-	errors_key := "target_type=count.type=invalid_line.unit=Err"
+	errors_key := "target_type_is_count.type_is_invalid_line.unit_is_Err"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
 	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 2)

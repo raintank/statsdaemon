@@ -115,7 +115,7 @@ func ParseMessage(data []byte, prefix_internal string, output *common.Output, pa
 			copy(report_line, line)
 			output.Invalid_lines.Broadcast <- report_line
 			metric = &common.Metric{
-				fmt.Sprintf("%starget_type=count.type=invalid_line.unit=Err", prefix_internal),
+				fmt.Sprintf("%starget_type_is_count.type_is_invalid_line.unit_is_Err", prefix_internal),
 				float64(1),
 				"c",
 				float32(1),
