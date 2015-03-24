@@ -5,10 +5,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	m20 "github.com/metrics20/go-metrics20"
 	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counter"
-	m20 "github.com/metrics20/go-metrics20"
 	"github.com/vimeo/statsdaemon/timer"
 	"github.com/vimeo/statsdaemon/udp"
 	"io"
@@ -102,7 +102,7 @@ var (
 // external signals and every flushInterval, computes and flushes the data
 func metricsMonitor() {
 	period := time.Duration(*flushInterval) * time.Second
-	ticker := time.NewTicker(period)
+	ticker := getAlignedTicker(period)
 	for {
 		select {
 		case sig := <-signalchan:
@@ -121,6 +121,7 @@ func metricsMonitor() {
 				log.Printf("ERROR: %s", err)
 			}
 			events.Broadcast <- "flush"
+			ticker = getAlignedTicker(period)
 		case s := <-Metrics:
 			var name string
 			if s.Modifier == "ms" {
