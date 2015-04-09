@@ -103,6 +103,14 @@ var (
 func metricsMonitor() {
 	period := time.Duration(*flushInterval) * time.Second
 	ticker := getAlignedTicker(period)
+
+	initializeCounters := func() {
+		for _, name := range []string{"timer", "gauge", "counter"} {
+			k := fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name)
+			counters[k] = 0
+		}
+	}
+	initializeCounters()
 	for {
 		select {
 		case sig := <-signalchan:
@@ -121,6 +129,7 @@ func metricsMonitor() {
 				log.Printf("ERROR: %s", err)
 			}
 			events.Broadcast <- "flush"
+			initializeCounters()
 			ticker = getAlignedTicker(period)
 		case s := <-Metrics:
 			var name string
