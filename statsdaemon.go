@@ -5,22 +5,19 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	m20 "github.com/metrics20/go-metrics20"
 	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
-	"github.com/vimeo/statsdaemon/counter"
-	"github.com/vimeo/statsdaemon/timer"
+	"github.com/vimeo/statsdaemon/counters"
+	"github.com/vimeo/statsdaemon/gauges"
+	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
 	"io"
 	"log"
-	"math"
 	"net"
 	"os"
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -35,27 +32,6 @@ const (
 
 var signalchan chan os.Signal
 
-type Percentiles []*Percentile
-type Percentile struct {
-	float float64
-	str   string
-}
-
-func (a *Percentiles) Set(s string) error {
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return err
-	}
-	*a = append(*a, &Percentile{f, strings.Replace(s, ".", "_", -1)})
-	return nil
-}
-func (p *Percentile) String() string {
-	return p.str
-}
-func (a *Percentiles) String() string {
-	return fmt.Sprintf("%v", *a)
-}
-
 var (
 	listen_addr           = config.String("listen_addr", ":8125")
 	listen_archive_addr   = config.String("listen_archive_addr", ":8124")
@@ -68,7 +44,7 @@ var (
 	prefix_timers         = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges         = config.String("prefix_gauges", "stats.gauges.")
 	percentile_thresholds = config.String("percentile_thresholds", "")
-	percentThreshold      = Percentiles{}
+	percentThreshold      *timers.Percentiles
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
 
 	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
@@ -87,9 +63,6 @@ var (
 	Metrics             = make(chan *common.Metric, MAX_UNPROCESSED_PACKETS)
 	metricAmounts       = make(chan common.MetricAmount)
 	metricStatsRequests = make(chan metricsStatsReq)
-	counters            = make(map[string]float64)
-	gauges              = make(map[string]float64)
-	timers              = make(map[string]timer.Data)
 	prefix_internal     string
 	valid_lines         = topic.New()
 	invalid_lines       = topic.New()
@@ -104,10 +77,19 @@ func metricsMonitor() {
 	period := time.Duration(*flushInterval) * time.Second
 	ticker := getAlignedTicker(period)
 
+	var c *counters.Counters
+	var g *gauges.Gauges
+	var t *timers.Timers
+
 	initializeCounters := func() {
+		c = counters.New(*prefix_rates)
+		g = gauges.New(*prefix_gauges)
+		t = timers.New(*prefix_timers, *percentThreshold)
 		for _, name := range []string{"timer", "gauge", "counter"} {
-			k := fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name)
-			counters[k] = 0
+			c.Add(&common.Metric{
+				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name),
+				Sampling: 1,
+			})
 		}
 	}
 	initializeCounters()
@@ -117,7 +99,7 @@ func metricsMonitor() {
 			switch sig {
 			case syscall.SIGTERM, syscall.SIGINT:
 				fmt.Printf("!! Caught signal %s... shutting down\n", sig)
-				if err := submit(time.Now().Add(period)); err != nil {
+				if err := submit(c, g, t, time.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
 				}
 				return
@@ -125,42 +107,45 @@ func metricsMonitor() {
 				fmt.Printf("unknown signal %s, ignoring\n", sig)
 			}
 		case <-ticker.C:
-			if err := submit(time.Now().Add(period)); err != nil {
-				log.Printf("ERROR: %s", err)
-			}
-			events.Broadcast <- "flush"
+			go func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers) {
+				if err := submit(c, g, t, time.Now().Add(period)); err != nil {
+					log.Printf("ERROR: %s", err)
+				}
+				events.Broadcast <- "flush"
+			}(c, g, t)
 			initializeCounters()
 			ticker = getAlignedTicker(period)
 		case s := <-Metrics:
 			var name string
 			if s.Modifier == "ms" {
-				timer.Add(timers, s)
+				t.Add(s)
 				name = "timer"
 			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = s.Value
+				g.Add(s)
 				name = "gauge"
 			} else {
-				counter.Add(counters, s)
+				c.Add(s)
 				name = "counter"
 			}
-			k := fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name)
-			_, ok := counters[k]
-			if !ok {
-				counters[k] = 1
-			} else {
-				counters[k] += 1
-			}
+			c.Add(&common.Metric{
+				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", prefix_internal, name),
+				Value:    1,
+				Sampling: 1,
+			})
 		}
 	}
 }
 
-type processFn func(*bytes.Buffer, int64, Percentiles) int64
+type statsdType interface {
+	Add(metric *common.Metric)
+	Process(buffer *bytes.Buffer, now int64, interval int) int64
+}
 
 // instrument wraps around a processing function, and makes sure we track the number of metrics and duration of the call,
 // which it flushes as metrics2.0 metrics to the outgoing buffer.
-func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentiles, name string) (num int64) {
+func instrument(st statsdType, buffer *bytes.Buffer, now int64, name string) (num int64) {
 	time_start := time.Now()
-	num = fun(buffer, now, pctls)
+	num = st.Process(buffer, now, *flushInterval)
 	time_end := time.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
 	fmt.Fprintf(buffer, "%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms %f %d\n", prefix_internal, name, duration_ms, now)
@@ -169,7 +154,7 @@ func instrument(fun processFn, buffer *bytes.Buffer, now int64, pctls Percentile
 }
 
 // submit basically invokes the processing function (instrumented) and tries to buffer to graphite
-func submit(deadline time.Time) error {
+func submit(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
 	var buffer bytes.Buffer
 
 	now := time.Now().Unix()
@@ -177,9 +162,9 @@ func submit(deadline time.Time) error {
 	// TODO: in future, buffer up data (with a TTL/max size) and submit later
 	client, err := net.Dial("tcp", *graphite_addr)
 	if err != nil {
-		processCounters(&buffer, now, percentThreshold)
-		processGauges(&buffer, now, percentThreshold)
-		processTimers(&buffer, now, percentThreshold)
+		c.Process(&buffer, now, *flushInterval)
+		g.Process(&buffer, now, *flushInterval)
+		t.Process(&buffer, now, *flushInterval)
 		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphite_addr, err.Error())
 		return errors.New(errmsg)
 	}
@@ -190,9 +175,9 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("could not set deadline - %s", err.Error())
 		return errors.New(errmsg)
 	}
-	instrument(processCounters, &buffer, now, percentThreshold, "counter")
-	instrument(processGauges, &buffer, now, percentThreshold, "gauge")
-	instrument(processTimers, &buffer, now, percentThreshold, "timer")
+	instrument(c, &buffer, now, "counter")
+	instrument(g, &buffer, now, "gauge")
+	instrument(t, &buffer, now, "timer")
 
 	if *debug {
 		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
@@ -224,141 +209,6 @@ func submit(deadline time.Time) error {
 	}
 
 	return nil
-}
-
-// processCounters computes the outbound metrics for counters, puts them in the buffer
-// and clears the datastructure
-func processCounters(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
-	var num int64
-	for s, c := range counters {
-		v := c / float64(*flushInterval)
-		fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(s, *prefix_rates), v, now)
-		num++
-	}
-	counters = make(map[string]float64)
-	return num
-}
-
-// processGauges puts gauges in the outbound buffer and deactivates the gauges in the datastructure
-func processGauges(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
-	var num int64
-	for g, c := range gauges {
-		if c == math.MaxUint64 {
-			continue
-		}
-		fmt.Fprintf(buffer, "%s %f %d\n", m20.Gauge(g, *prefix_gauges), c, now)
-		gauges[g] = math.MaxUint64
-		num++
-	}
-	return num
-}
-
-// processTimers computes the outbound metrics for timers, puts them in the buffer
-// and deactivates their entries in the datastructure
-func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
-	// these are the metrics that get exposed:
-	// count estimate of original amount of metrics sent, by dividing received by samplerate
-	// count_ps  same but per second
-	// lower
-	// mean  // arithmetic mean
-	// mean_<pct> // arithmetic mean of values below <pct> percentile
-	// median
-	// std  standard deviation
-	// sum
-	// sum_90
-	// upper
-	// upper_90 / lower_90
-
-	var num int64
-	for u, t := range timers {
-		if len(t.Points) > 0 {
-			seen := len(t.Points)
-			count := t.Amount_submitted
-			count_ps := float64(count) / float64(*flushInterval)
-			num++
-
-			sort.Sort(t.Points)
-			min := t.Points[0]
-			max := t.Points[seen-1]
-
-			sum := float64(0)
-			for _, value := range t.Points {
-				sum += value
-			}
-			mean := float64(sum) / float64(seen)
-			sumOfDiffs := float64(0)
-			for _, value := range t.Points {
-				sumOfDiffs += math.Pow((float64(value) - mean), 2)
-			}
-			stddev := math.Sqrt(sumOfDiffs / float64(seen))
-			mid := seen / 2
-			var median float64
-			if seen%2 == 1 {
-				median = t.Points[mid]
-			} else {
-				median = (t.Points[mid-1] + t.Points[mid]) / 2
-			}
-			var cumulativeValues timer.Float64Slice
-			cumulativeValues = make(timer.Float64Slice, seen, seen)
-			cumulativeValues[0] = t.Points[0]
-			for i := 1; i < seen; i++ {
-				cumulativeValues[i] = t.Points[i] + cumulativeValues[i-1]
-			}
-
-			maxAtThreshold := max
-			sum_pct := sum
-			mean_pct := mean
-
-			for _, pct := range pctls {
-
-				if seen > 1 {
-					var abs float64
-					if pct.float >= 0 {
-						abs = pct.float
-					} else {
-						abs = 100 + pct.float
-					}
-					// poor man's math.Round(x):
-					// math.Floor(x + 0.5)
-					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(seen)) + 0.5))
-					if pct.float >= 0 {
-						sum_pct = cumulativeValues[indexOfPerc-1]
-						maxAtThreshold = t.Points[indexOfPerc-1]
-					} else {
-						maxAtThreshold = t.Points[indexOfPerc]
-						sum_pct = cumulativeValues[seen-1] - cumulativeValues[seen-indexOfPerc-1]
-					}
-					mean_pct = float64(sum_pct) / float64(indexOfPerc)
-				}
-
-				var pctstr string
-				var fn func(metric_in, prefix, percentile, timespec string) string
-				if pct.float >= 0 {
-					pctstr = pct.str
-					fn = m20.Max
-				} else {
-					pctstr = pct.str[1:]
-					fn = m20.Min
-				}
-				fmt.Fprintf(buffer, "%s %f %d\n", fn(u, *prefix_timers, pctstr, ""), maxAtThreshold, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, *prefix_timers, pctstr, ""), mean_pct, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, *prefix_timers, pctstr, ""), sum_pct, now)
-			}
-
-			var z timer.Float64Slice
-			timers[u] = timer.Data{z, 0}
-
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, *prefix_timers, "", ""), mean, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Median(u, *prefix_timers, "", ""), median, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Std(u, *prefix_timers, "", ""), stddev, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, *prefix_timers, "", ""), sum, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Max(u, *prefix_timers, "", ""), max, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Min(u, *prefix_timers, "", ""), min, now)
-			fmt.Fprintf(buffer, "%s %d %d\n", m20.CountPckt(u, *prefix_timers), count, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.RatePckt(u, *prefix_timers), count_ps, now)
-		}
-	}
-	return num
 }
 
 // Amounts is a datastructure to track numbers of packets, in particular:
@@ -589,15 +439,10 @@ func main() {
 	}
 	config.Parse(*config_file)
 	runtime.GOMAXPROCS(*processes)
-	pcts := strings.Split(*percentile_thresholds, ",")
-	for _, pct := range pcts {
-		if pct == "" {
-			continue
-		}
-		err := percentThreshold.Set(pct)
-		if err != nil {
-			log.Fatal(err)
-		}
+	var err error
+	percentThreshold, err = timers.NewPercentiles(*percentile_thresholds)
+	if err != nil {
+		log.Fatal(err)
 	}
 	inst := os.Expand(*instance, expand_cfg_vars)
 	if inst == "" {

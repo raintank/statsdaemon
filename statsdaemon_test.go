@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"github.com/bmizerany/assert"
 	"github.com/vimeo/statsdaemon/common"
-	"github.com/vimeo/statsdaemon/counter"
-	"github.com/vimeo/statsdaemon/timer"
+	"github.com/vimeo/statsdaemon/counters"
+	"github.com/vimeo/statsdaemon/gauges"
+	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
 	"math/rand"
 	"regexp"
@@ -15,12 +16,6 @@ import (
 	"time"
 )
 
-var commonPercentiles = Percentiles{
-	&Percentile{
-		99,
-		"99",
-	},
-}
 var output = common.NullOutput()
 
 func TestPacketParse(t *testing.T) {
@@ -111,12 +106,13 @@ func TestMean(t *testing.T) {
 	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
+	ti := timers.New("", timers.Percentiles{})
+
 	for _, p := range packets {
-		timer.Add(timers, p)
+		ti.Add(p)
 	}
 	var buff bytes.Buffer
-	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{})
+	num := ti.Process(&buff, time.Now().Unix(), 60)
 	assert.Equal(t, num, int64(1))
 	dataForGraphite := buff.String()
 	pattern := `response_time\.mean 20\.[0-9]+ `
@@ -131,18 +127,15 @@ func TestUpperPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
+	pct, _ := timers.NewPercentiles("75")
+	ti := timers.New("", *pct)
+
 	for _, p := range packets {
-		timer.Add(timers, p)
+		ti.Add(p)
 	}
 
 	var buff bytes.Buffer
-	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{
-		&Percentile{
-			75,
-			"75",
-		},
-	})
+	num := ti.Process(&buff, time.Now().Unix(), 60)
 	assert.Equal(t, num, int64(1))
 	dataForGraphite := buff.String()
 
@@ -155,18 +148,17 @@ func TestMetrics20Timer(t *testing.T) {
 	d := []byte("foo=bar.target_type=gauge.unit=ms:5|ms\nfoo=bar.target_type=gauge.unit=ms:10|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
+	pct, _ := timers.NewPercentiles("75")
+	ti := timers.New("", *pct)
+
 	for _, p := range packets {
-		timer.Add(timers, p)
+		ti.Add(p)
 	}
 
 	var buff bytes.Buffer
-	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{
-		&Percentile{
-			75,
-			"75",
-		},
-	})
+	num := ti.Process(&buff, time.Now().Unix(), 10)
+	assert.Equal(t, int(num), 1)
+
 	dataForGraphite := buff.String()
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max_75 10.000000"))
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean_75 7.500000"))
@@ -184,18 +176,15 @@ func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
+	c := counters.New("")
 	for _, p := range packets {
-		counter.Add(counters, p)
+		c.Add(p)
 	}
 
 	var buff bytes.Buffer
 	var num int64
-	num += processCounters(&buff, time.Now().Unix(), Percentiles{
-		&Percentile{
-			75,
-			"75",
-		},
-	})
+	num += c.Process(&buff, time.Now().Unix(), 10)
+
 	dataForGraphite := buff.String()
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Bps 1.5"))
 }
@@ -205,18 +194,17 @@ func TestLowerPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
+	pct, _ := timers.NewPercentiles("-75")
+	ti := timers.New("", *pct)
+
 	for _, p := range packets {
-		timer.Add(timers, p)
+		ti.Add(p)
 	}
 
 	var buff bytes.Buffer
 	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{
-		&Percentile{
-			-75,
-			"-75",
-		},
-	})
+	num += ti.Process(&buff, time.Now().Unix(), 10)
+
 	assert.Equal(t, num, int64(1))
 	dataForGraphite := buff.String()
 
@@ -231,62 +219,72 @@ func TestLowerPercentile(t *testing.T) {
 
 func BenchmarkManyDifferentSensors(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
+
+	pct, _ := timers.NewPercentiles("99")
+	ti := timers.New("foo", *pct)
+	c := counters.New("bar")
+	g := gauges.New("baz")
+
 	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
 			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-			timer.Add(timers, m)
+			ti.Add(m)
 		}
 	}
 
 	for i := 0; i < 1000; i++ {
 		bucket := "count" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := r.Float64()
-			counters[bucket] = a
+			m := &common.Metric{bucket, r.Float64(), "c", r.Float32(), 0}
+			c.Add(m)
 		}
 	}
 
 	for i := 0; i < 1000; i++ {
 		bucket := "gauge" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := r.Float64()
-			gauges[bucket] = a
+			m := &common.Metric{bucket, r.Float64(), "g", r.Float32(), 0}
+			g.Add(m)
 		}
 	}
 
 	var buff bytes.Buffer
 	now := time.Now().Unix()
 	t.ResetTimer()
-	processTimers(&buff, now, commonPercentiles)
-	processCounters(&buff, now, commonPercentiles)
-	processGauges(&buff, now, commonPercentiles)
+	ti.Process(&buff, now, 10)
+	c.Process(&buff, now, 10)
+	g.Process(&buff, now, 10)
 }
 
 func BenchmarkOneBigTimer(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
+	pct, _ := timers.NewPercentiles("99")
+	ti := timers.New("foo", *pct)
 	bucket := "response_time"
 	for i := 0; i < 10000000; i++ {
 		m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-		timer.Add(timers, m)
+		ti.Add(m)
 	}
 
 	var buff bytes.Buffer
 	t.ResetTimer()
-	processTimers(&buff, time.Now().Unix(), commonPercentiles)
+	ti.Process(&buff, time.Now().Unix(), 10)
 }
 
 func BenchmarkLotsOfTimers(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
+	pct, _ := timers.NewPercentiles("99")
+	ti := timers.New("foo", *pct)
 	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
 			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-			timer.Add(timers, m)
+			ti.Add(m)
 		}
 	}
 
 	var buff bytes.Buffer
 	t.ResetTimer()
-	processTimers(&buff, time.Now().Unix(), commonPercentiles)
+	ti.Process(&buff, time.Now().Unix(), 10)
 }
