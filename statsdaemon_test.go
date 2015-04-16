@@ -8,9 +8,7 @@ import (
 	"github.com/vimeo/statsdaemon/gauges"
 	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
-	"math/rand"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -217,74 +215,76 @@ func TestLowerPercentile(t *testing.T) {
 	assert.Equal(t, matched, true)
 }
 
-func BenchmarkManyDifferentSensors(t *testing.B) {
-	r := rand.New(rand.NewSource(438))
-
-	pct, _ := timers.NewPercentiles("99")
-	ti := timers.New("foo", *pct)
+func BenchmarkDifferentCountersAddAndProcess(b *testing.B) {
+	metrics := getDifferentCounters(1000)
+	b.ResetTimer()
 	c := counters.New("bar")
-	g := gauges.New("baz")
-
-	for i := 0; i < 1000; i++ {
-		bucket := "response_time" + strconv.Itoa(i)
-		for i := 0; i < 10000; i++ {
-			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-			ti.Add(m)
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			c.Add(&metrics[i])
 		}
 	}
-
-	for i := 0; i < 1000; i++ {
-		bucket := "count" + strconv.Itoa(i)
-		for i := 0; i < 10000; i++ {
-			m := &common.Metric{bucket, r.Float64(), "c", r.Float32(), 0}
-			c.Add(m)
-		}
-	}
-
-	for i := 0; i < 1000; i++ {
-		bucket := "gauge" + strconv.Itoa(i)
-		for i := 0; i < 10000; i++ {
-			m := &common.Metric{bucket, r.Float64(), "g", r.Float32(), 0}
-			g.Add(m)
-		}
-	}
-
-	var buff bytes.Buffer
-	now := time.Now().Unix()
-	t.ResetTimer()
-	ti.Process(&buff, now, 10)
-	c.Process(&buff, now, 10)
-	g.Process(&buff, now, 10)
+	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkOneBigTimer(t *testing.B) {
-	r := rand.New(rand.NewSource(438))
-	pct, _ := timers.NewPercentiles("99")
-	ti := timers.New("foo", *pct)
-	bucket := "response_time"
-	for i := 0; i < 10000000; i++ {
-		m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-		ti.Add(m)
-	}
-
-	var buff bytes.Buffer
-	t.ResetTimer()
-	ti.Process(&buff, time.Now().Unix(), 10)
-}
-
-func BenchmarkLotsOfTimers(t *testing.B) {
-	r := rand.New(rand.NewSource(438))
-	pct, _ := timers.NewPercentiles("99")
-	ti := timers.New("foo", *pct)
-	for i := 0; i < 1000; i++ {
-		bucket := "response_time" + strconv.Itoa(i)
-		for i := 0; i < 10000; i++ {
-			m := &common.Metric{bucket, r.Float64(), "ms", r.Float32(), 0}
-			ti.Add(m)
+func BenchmarkSameCountersAddAndProcess(b *testing.B) {
+	metrics := getSameCounters(1000)
+	b.ResetTimer()
+	c := gauges.New("bar")
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			c.Add(&metrics[i])
 		}
 	}
+	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
 
-	var buff bytes.Buffer
-	t.ResetTimer()
-	ti.Process(&buff, time.Now().Unix(), 10)
+func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
+	metrics := getDifferentGauges(1000)
+	b.ResetTimer()
+	g := gauges.New("bar")
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			g.Add(&metrics[i])
+		}
+	}
+	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
+	metrics := getSameGauges(1000)
+	b.ResetTimer()
+	g := gauges.New("bar")
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			g.Add(&metrics[i])
+		}
+	}
+	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
+	metrics := getDifferentTimers(1000)
+	b.ResetTimer()
+	pct, _ := timers.NewPercentiles("99")
+	t := timers.New("bar", *pct)
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			t.Add(&metrics[i])
+		}
+	}
+	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkSameTimersAddAndProcess(b *testing.B) {
+	metrics := getSameTimers(1000)
+	b.ResetTimer()
+	pct, _ := timers.NewPercentiles("99")
+	t := timers.New("bar", *pct)
+	for i := 0; i < len(metrics); i++ {
+		for n := 0; n < b.N; n++ {
+			t.Add(&metrics[i])
+		}
+	}
+	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
