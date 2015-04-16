@@ -21,10 +21,6 @@ func New(prefixRates string) *Counters {
 
 // Add updates the counters map, adding the metric key if needed
 func (c *Counters) Add(metric *common.Metric) {
-	_, ok := c.values[metric.Bucket]
-	if !ok {
-		c.values[metric.Bucket] = 0
-	}
 	c.values[metric.Bucket] += metric.Value * float64(1/metric.Sampling)
 }
 
