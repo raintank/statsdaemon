@@ -26,8 +26,15 @@ import (
 )
 
 const (
-	VERSION                 = "0.5.2-alpha"
-	MAX_UNPROCESSED_PACKETS = 1000
+	VERSION = "0.5.2-alpha"
+	// number of packets we can read out of udp buffer without processing them
+	// normally this number shouldn't be so high because metricsMonitor()
+	// should be able to continuously read in metrics with barely any blocking
+	// in practice this doesn't seem to work. with a max of 1000 we would sometimes
+	// see packets getting dropped by kernel out of the udp buffer.
+	// the right solution is profiling and fixing but i don't have time right now.
+	// at about 100B per metric => should be about 100MB of ram max
+	MAX_UNPROCESSED_PACKETS = 1000000
 )
 
 var signalchan chan os.Signal
