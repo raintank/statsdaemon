@@ -64,45 +64,6 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 	return metric, nil
 }
 
-// ParseArchiveLine turns an "archive line" into an *Metric (or not) and returns an error if the line was invalid.
-// note that *Metric can be nil when the line was valid (if the line was empty)
-// input format: key value ts modifier [samplerate]
-func ParseArchiveLine(line []byte) (metric *common.Metric, err error) {
-	if len(line) == 0 {
-		return nil, nil
-	}
-	parts := bytes.SplitN(bytes.TrimSpace(line), []byte(" "), 6)
-	if len(parts) != 4 && len(parts) != 5 {
-		return nil, errors.New("incorrect amount of fields")
-	}
-	bucket := parts[0]
-	value, err := strconv.ParseFloat(string(parts[1]), 64)
-	if err != nil {
-		return nil, errors.New("couldn't parseFloat value")
-	}
-	ts, err := strconv.ParseUint(string(parts[2]), 32, 32)
-	modifier := string(parts[3])
-	if modifier != "g" && modifier != "c" && modifier != "ms" {
-		return nil, errors.New("unsupported metric type")
-	}
-	sampleRate := float64(1)
-	if len(parts) == 5 {
-		var err error
-		sampleRate, err = strconv.ParseFloat(string(parts[4]), 32)
-		if err != nil {
-			return nil, errors.New("couldn't parseFloat sampling")
-		}
-	}
-	metric = &common.Metric{
-		Bucket:   string(bucket),
-		Value:    value,
-		Modifier: modifier,
-		Sampling: float32(sampleRate),
-		Time:     uint32(ts),
-	}
-	return metric, nil
-}
-
 // ParseMessage turns byte data into a slice of metric pointers
 // note that it creates "invalid line" metrics itself, upon invalid lines,
 // which will get passed on and aggregated along with the other metrics
@@ -138,10 +99,6 @@ type parseLineFunc func(line []byte) (metric *common.Metric, err error)
 
 func StatsListener(listen_addr, prefix_internal string, output *common.Output) {
 	Listener(listen_addr, prefix_internal, output, ParseLine2)
-}
-
-func ArchiveStatsListener(listen_addr, prefix_internal string, output *common.Output) {
-	Listener(listen_addr, prefix_internal, output, ParseArchiveLine)
 }
 
 // Listener receives packets from the udp buffer, parses them and feeds both the Metrics channel

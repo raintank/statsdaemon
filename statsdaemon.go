@@ -34,7 +34,6 @@ var signalchan chan os.Signal
 
 var (
 	listen_addr           = config.String("listen_addr", ":8125")
-	listen_archive_addr   = config.String("listen_archive_addr", ":8124")
 	admin_addr            = config.String("admin_addr", ":8126")
 	graphite_addr         = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval         = config.Int("flush_interval", 10)
@@ -464,7 +463,6 @@ func main() {
 	}
 	output := &common.Output{Metrics, metricAmounts, valid_lines, invalid_lines}
 	go udp.StatsListener(*listen_addr, prefix_internal, output)
-	go udp.ArchiveStatsListener(*listen_archive_addr, prefix_internal, output)
 	go adminListener()
 	go metricStatsMonitor()
 	metricsMonitor()
