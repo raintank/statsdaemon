@@ -23,18 +23,17 @@ import (
 	"time"
 
 	"github.com/stvp/go-toml-config"
+	"net/http"
+	_ "net/http/pprof"
 )
 
 const (
 	VERSION = "0.5.2-alpha"
 	// number of packets we can read out of udp buffer without processing them
-	// normally this number shouldn't be so high because metricsMonitor()
+	// this number shouldn't be high because metricsMonitor()
 	// should be able to continuously read in metrics with barely any blocking
-	// in practice this doesn't seem to work. with a max of 1000 we would sometimes
-	// see packets getting dropped by kernel out of the udp buffer.
-	// the right solution is profiling and fixing but i don't have time right now.
-	// at about 100B per metric => should be about 100MB of ram max
-	MAX_UNPROCESSED_PACKETS = 1000000
+	// keep in mind that one metric is about 30 to 100 bytes of memory, so this is peanuts
+	MAX_UNPROCESSED_PACKETS = 1000
 )
 
 var signalchan chan os.Signal
@@ -42,6 +41,7 @@ var signalchan chan os.Signal
 var (
 	listen_addr           = config.String("listen_addr", ":8125")
 	admin_addr            = config.String("admin_addr", ":8126")
+	profile_addr          = config.String("profile_addr", ":6060")
 	graphite_addr         = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval         = config.Int("flush_interval", 10)
 	processes             = config.Int("processes", 1)
@@ -468,6 +468,10 @@ func main() {
 			}
 		}()
 	}
+	go func() {
+		fmt.Println("Profiling endpoint listening on " + *profile_addr)
+		log.Println(http.ListenAndServe(*profile_addr, nil))
+	}()
 	output := &common.Output{Metrics, metricAmounts, valid_lines, invalid_lines}
 	go udp.StatsListener(*listen_addr, prefix_internal, output)
 	go adminListener()

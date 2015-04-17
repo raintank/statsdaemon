@@ -34,6 +34,10 @@ func (s Float64Slice) Len() int           { return len(s) }
 func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
+func (t *Timers) String() string {
+	return fmt.Sprintf("<*Timers %p prefix '%s', percentiles '%s', %d values>", t, t.prefix, t.pctls, len(t.values))
+}
+
 // Add updates the timers map, adding the metric key if needed
 func (timers *Timers) Add(metric *common.Metric) {
 	t, ok := timers.values[metric.Bucket]

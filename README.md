@@ -4,6 +4,9 @@ statsdaemon
 Metrics aggregation daemon like [statsd](https://github.com/etsy/statsd), in Go and with a bunch of extra features.
 (Based on code from [Bitly's statsdaemon](https://github.com/bitly/statsdaemon))
 
+[![Build Status](https://secure.travis-ci.org/vimeo/statsdaemon.png)](http://travis-ci.org/vimeo/statsdaemon)
+[![GoDoc](https://godoc.org/github.com/vimeo/statsdaemon?status.png)](https://godoc.org/github.com/vimeo/statsdaemon)
+
 
 Features you expect:
 =======================
@@ -45,13 +48,17 @@ In terms of performance, I didn't do extensive or scientific benchmarking but he
 
 ![Performance](https://raw.github.com/vimeo/statsdaemon/master/img/statsd-to-statsdaemon-switch.png)
 
+Performance and profiling
+=========================
 
-
-
-
-[![Build Status](https://secure.travis-ci.org/vimeo/statsdaemon.png)](http://travis-ci.org/vimeo/statsdaemon)
-[![GoDoc](https://godoc.org/github.com/vimeo/statsdaemon?status.png)](https://godoc.org/github.com/vimeo/statsdaemon)
-
+As with any statsd version, you should monitor whether the kernel drops incoming UDP packets.
+When statsdaemon (or statsd) cannot read packets from the udp socket fast enough - perhaps because it's
+overloaded with packet processing, or the udp reading is the slowest part of the chain (the
+case in statsdaemon) - then the udp buffer will grow and ultimately fill up, and have no more room
+for new packets, which get dropped, resulting in gaps in graphs.
+With statsdaemon this limit seems to be at around 60k packets per second.
+You can improve on this by batching multiple metrics into the same packet, and/or sampling more.
+Statsdaemon exposes a profiling endpoint for pprof, at port 6060 by default (see config).
 
 Admin telnet api
 ================
