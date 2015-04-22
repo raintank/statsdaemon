@@ -30,10 +30,10 @@ import (
 const (
 	VERSION = "0.5.2-alpha"
 	// number of packets we can read out of udp buffer without processing them
-	// this number shouldn't be high because metricsMonitor()
-	// should be able to continuously read in metrics with barely any blocking
-	// keep in mind that one metric is about 30 to 100 bytes of memory, so this is peanuts
-	MAX_UNPROCESSED_PACKETS = 1000
+	// statsdaemon doesn't really interrupt the udp reader like some other statsd's do (like on flush)
+	// but this can still be useful to deal with traffic bursts.
+	// keep in mind that one metric is about 30 to 100 bytes of memory.
+	MAX_UNPROCESSED_PACKETS = 1000000
 )
 
 var signalchan chan os.Signal
