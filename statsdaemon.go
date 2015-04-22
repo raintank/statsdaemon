@@ -468,10 +468,12 @@ func main() {
 			}
 		}()
 	}
-	go func() {
-		fmt.Println("Profiling endpoint listening on " + *profile_addr)
-		log.Println(http.ListenAndServe(*profile_addr, nil))
-	}()
+	if *profile_addr != "" {
+		go func() {
+			fmt.Println("Profiling endpoint listening on " + *profile_addr)
+			log.Println(http.ListenAndServe(*profile_addr, nil))
+		}()
+	}
 	output := &common.Output{Metrics, metricAmounts, valid_lines, invalid_lines}
 	go udp.StatsListener(*listen_addr, prefix_internal, output)
 	go adminListener()
