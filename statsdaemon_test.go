@@ -215,8 +215,8 @@ func TestLowerPercentile(t *testing.T) {
 	assert.Equal(t, matched, true)
 }
 
-func BenchmarkDifferentCountersAddAndProcess(b *testing.B) {
-	metrics := getDifferentCounters(1000)
+func BenchmarkMillionDifferentCountersAddAndProcess(b *testing.B) {
+	metrics := getDifferentCounters(1000000)
 	b.ResetTimer()
 	c := counters.New("bar")
 	for i := 0; i < len(metrics); i++ {
@@ -227,8 +227,8 @@ func BenchmarkDifferentCountersAddAndProcess(b *testing.B) {
 	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkSameCountersAddAndProcess(b *testing.B) {
-	metrics := getSameCounters(1000)
+func BenchmarkMillionSameCountersAddAndProcess(b *testing.B) {
+	metrics := getSameCounters(1000000)
 	b.ResetTimer()
 	c := gauges.New("bar")
 	for i := 0; i < len(metrics); i++ {
@@ -239,8 +239,8 @@ func BenchmarkSameCountersAddAndProcess(b *testing.B) {
 	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
-	metrics := getDifferentGauges(1000)
+func BenchmarkMillionDifferentGaugesAddAndProcess(b *testing.B) {
+	metrics := getDifferentGauges(1000000)
 	b.ResetTimer()
 	g := gauges.New("bar")
 	for i := 0; i < len(metrics); i++ {
@@ -251,8 +251,8 @@ func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
 	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
-	metrics := getSameGauges(1000)
+func BenchmarkMillionSameGaugesAddAndProcess(b *testing.B) {
+	metrics := getSameGauges(1000000)
 	b.ResetTimer()
 	g := gauges.New("bar")
 	for i := 0; i < len(metrics); i++ {
@@ -263,8 +263,8 @@ func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
 	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
-	metrics := getDifferentTimers(1000)
+func BenchmarkMillionDifferentTimersAddAndProcess(b *testing.B) {
+	metrics := getDifferentTimers(1000000)
 	b.ResetTimer()
 	pct, _ := timers.NewPercentiles("99")
 	t := timers.New("bar", *pct)
@@ -276,8 +276,8 @@ func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
 	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkSameTimersAddAndProcess(b *testing.B) {
-	metrics := getSameTimers(1000)
+func BenchmarkMillionSameTimersAddAndProcess(b *testing.B) {
+	metrics := getSameTimers(1000000)
 	b.ResetTimer()
 	pct, _ := timers.NewPercentiles("99")
 	t := timers.New("bar", *pct)
