@@ -1,4 +1,4 @@
-package main
+package ticker
 
 import (
 	"time"
@@ -8,7 +8,7 @@ import (
 func main() {
     work := 0
     for {
-        ticker := getAlignedTicker(time.Duration(1) * time.Second)
+        ticker := GetAlignedTicker(time.Duration(1) * time.Second)
         <- ticker.C
         fmt.Println("starting work at", time.Now())
         time.Sleep(time.Duration(work) * 5 * time.Millisecond)
@@ -18,11 +18,11 @@ func main() {
 }
 */
 
-// getAlignedTicker returns a ticker so that, let's say interval is a second
+// GetAlignedTicker returns a ticker so that, let's say interval is a second
 // then it will tick at every whole second, or if it's 60s than it's every whole
 // minute. Note that in my testing this is about .0001 to 0.0002 seconds off due
 // to scheduling etc.
-func getAlignedTicker(period time.Duration) *time.Ticker {
+func GetAlignedTicker(period time.Duration) *time.Ticker {
 	unix := time.Now().UnixNano()
 	diff := time.Duration(period - (time.Duration(unix) % period))
 	return time.NewTicker(diff)

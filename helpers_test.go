@@ -1,4 +1,4 @@
-package main
+package statsdaemon
 
 import (
 	"github.com/vimeo/statsdaemon/common"
