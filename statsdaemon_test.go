@@ -15,6 +15,7 @@ import (
 )
 
 var output = common.NullOutput()
+var prefix_internal = ""
 
 func TestPacketParse(t *testing.T) {
 	d := []byte("gaugor:333|g")
