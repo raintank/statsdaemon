@@ -94,7 +94,7 @@ Installing
 ==========
 
 ```bash
-go get github.com/Vimeo/statsdaemon
+go get github.com/Vimeo/statsdaemon/statsdaemon
 ```
 
 Command Line Options
