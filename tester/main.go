@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/Dieterbe/statsd-go"
+	"github.com/alexcesaro/statsd"
 	"github.com/vimeo/statsdaemon"
 	"github.com/vimeo/statsdaemon/timers"
 	"io"
@@ -39,10 +39,6 @@ func main() {
 		defer pprof.WriteHeapProfile(f)
 	}
 
-	cl, err := statsd.NewClient(true, "localhost:8125", "statsd-tester")
-	if nil != err {
-		panic(err)
-	}
 	laddr, err := net.ResolveTCPAddr("tcp", "localhost:2003")
 	if nil != err {
 		panic(err)
@@ -51,19 +47,26 @@ func main() {
 	go w.Run()
 	pct := timers.Percentiles{}
 	daemon := statsdaemon.New("test", ":8125", ":8126", ":2003", "rates.", "timers.", "gauges.", pct, 10, 1000, 1000, nil, false)
-	tick := time.Tick(time.Duration(1) * time.Second)
+	go daemon.Run()
+	//daemon must be running otherwise client complains
+	time.Sleep(200 * time.Millisecond)
+	cl, err := statsd.New(":8125", statsd.WithPrefix("statsd-tester"), statsd.WithFlushPeriod(10*time.Millisecond))
+	if nil != err {
+		panic(err)
+	}
+
+	tick := time.Tick(time.Duration(10) * time.Millisecond)
 	go func() {
 		for range tick {
-			// send 1M packets per second in theory. in practice this takes more than a second
-			msg := []byte("test.counter:1|c")
-			for i := 0; i < 1000000; i++ {
-				//cl.Increment("test-counter")
-				cl.SendRaw(msg)
+			for i := 0; i < 10000; i++ {
+				cl.Count("test-counter", 1, 1)
+
 			}
 		}
 	}()
+	time.Sleep(10 * 11 * time.Second)
+	panic("timeout: watcher did not get all updates from statsdaemon")
 
-	daemon.Run()
 }
 
 type watcher struct {
