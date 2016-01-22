@@ -10,17 +10,17 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
-    "runtime"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var memprofile = flag.String("memprofile", "", "write memory profile to this file")
 
 func main() {
-    runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(4)
 	flag.Parse()
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -55,10 +55,10 @@ func main() {
 	go func() {
 		for range tick {
 			// send 1M packets per second in theory. in practice this takes more than a second
-            msg := []byte("test.counter:1|c")
+			msg := []byte("test.counter:1|c")
 			for i := 0; i < 1000000; i++ {
 				//cl.Increment("test-counter")
-                cl.SendRaw(msg)
+				cl.SendRaw(msg)
 			}
 		}
 	}()
