@@ -42,7 +42,7 @@ type StatsDaemon struct {
 	max_unprocessed     int
 	max_timers_per_s    uint64
 	signalchan          chan os.Signal
-	Metrics             chan *common.Metric
+	Metrics             chan []*common.Metric
 	metricAmounts       chan common.MetricAmount
 	metricStatsRequests chan metricsStatsReq
 	valid_lines         *topic.Topic
@@ -68,7 +68,7 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers
 		max_unprocessed,
 		max_timers_per_s,
 		signalchan,
-		make(chan *common.Metric, max_unprocessed),
+		make(chan []*common.Metric, max_unprocessed),
 		make(chan common.MetricAmount, max_unprocessed),
 		make(chan metricsStatsReq),
 		topic.New(),
@@ -164,16 +164,18 @@ func (s *StatsDaemon) metricsMonitor() {
 			}(c, g, t)
 			initializeCounters()
 			tick = ticker.GetAlignedTicker(s.Clock, period)
-		case m := <-s.Metrics:
-			if m.Modifier == "ms" {
-				t.Add(m)
-				c.Add(oneTimer)
-			} else if m.Modifier == "g" {
-				g.Add(m)
-				c.Add(oneGauge)
-			} else {
-				c.Add(m)
-				c.Add(oneCounter)
+		case metrics := <-s.Metrics:
+			for _, m := range metrics {
+				if m.Modifier == "ms" {
+					t.Add(m)
+					c.Add(oneTimer)
+				} else if m.Modifier == "g" {
+					g.Add(m)
+					c.Add(oneGauge)
+				} else {
+					c.Add(m)
+					c.Add(oneCounter)
+				}
 			}
 		}
 	}

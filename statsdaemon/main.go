@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon"
+	"github.com/vimeo/statsdaemon/timers"
 	"log"
 	"os"
 	"os/signal"
@@ -23,7 +23,7 @@ const (
 	// statsdaemon doesn't really interrupt the udp reader like some other statsd's do (like on flush)
 	// but this can still be useful to deal with traffic bursts.
 	// keep in mind that one metric is about 30 to 100 bytes of memory.
-	MAX_UNPROCESSED_PACKETS = 1000000
+	MAX_UNPROCESSED_PACKETS = 1000
 )
 
 var (

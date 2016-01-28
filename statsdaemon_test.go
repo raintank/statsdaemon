@@ -306,12 +306,15 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	}
 	go daemon.RunBare()
 	b.ResetTimer()
-	counter := &common.Metric{
-		"test-counter",
-		float64(1),
-		"c",
-		float32(1),
-		0,
+	counters := make([]*common.Metric, 10)
+	for i := 0; i < 10; i++ {
+		counters[i] = &common.Metric{
+			"test-counter",
+			float64(1),
+			"c",
+			float32(1),
+			0,
+		}
 	}
 	// each operation consists of 100x write 10kmetrics + move clock by 1second
 	// simulating a fake 10k metrics/s load, 1M metrics in total over 100s, so 10 flushes
@@ -320,8 +323,8 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 		total = 0
 		totalLock.Unlock()
 		for j := 0; j < 100; j++ {
-			for i := 0; i < 10000; i++ {
-				daemon.Metrics <- counter
+			for i := 0; i < 1000; i++ {
+				daemon.Metrics <- counters
 			}
 			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
 		}

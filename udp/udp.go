@@ -123,9 +123,9 @@ func Listener(listen_addr, prefix_internal string, output *common.Output, parse 
 			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
 			continue
 		}
-
-		for _, p := range ParseMessage(message[:n], prefix_internal, output, parse) {
-			output.Metrics <- p
+		metrics := ParseMessage(message[:n], prefix_internal, output, parse)
+		output.Metrics <- metrics
+		for _, p := range metrics {
 			output.MetricAmounts <- common.MetricAmount{p.Bucket, p.Sampling}
 		}
 	}
