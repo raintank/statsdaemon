@@ -300,6 +300,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
 		return nil
 	}
+	daemon.initializeCounters()
 	go daemon.RunBare()
 	b.ResetTimer()
 	counter := &common.Metric{
@@ -315,7 +316,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 		total = 0
 		for j := 0; j < 100; j++ {
 			for i := 0; i < 10000; i++ {
-				daemon.Metrics <- counter
+				daemon.AddMetric(counter)
 			}
 			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
 		}

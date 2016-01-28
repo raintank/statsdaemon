@@ -17,6 +17,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -51,15 +52,22 @@ type StatsDaemon struct {
 	debug               bool
 	Clock               clock.Clock
 	submitFunc          SubmitFunc
+	counters            atomic.Value
+	gauges              atomic.Value
+	timers              atomic.Value
+	oneCounter          *common.Metric
+	oneGauge            *common.Metric
+	oneTimer            *common.Metric
 }
 
 func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool) *StatsDaemon {
+	prefix := "service_is_statsdaemon.instance_is_" + instance + "."
 	return &StatsDaemon{
 		instance,
 		"",
 		"",
 		"",
-		"service_is_statsdaemon.instance_is_" + instance + ".",
+		prefix,
 		prefix_rates,
 		prefix_timers,
 		prefix_gauges,
@@ -77,6 +85,24 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers
 		debug,
 		nil,
 		nil,
+		atomic.Value{},
+		atomic.Value{},
+		atomic.Value{},
+		&common.Metric{
+			Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", prefix),
+			Value:    1,
+			Sampling: 1,
+		},
+		&common.Metric{
+			Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", prefix),
+			Value:    1,
+			Sampling: 1,
+		},
+		&common.Metric{
+			Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", prefix),
+			Value:    1,
+			Sampling: 1,
+		},
 	}
 }
 
@@ -88,6 +114,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.submitFunc = s.GraphiteSubmit
 	s.Clock = clock.New()
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
+	s.initializeCounters()
 	output := &common.Output{s.Metrics, s.metricAmounts, s.valid_lines, s.Invalid_lines}
 	go udp.StatsListener(s.listen_addr, s.prefix, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
 	go s.adminListener()                                  // tcp admin_addr to handle requests
@@ -102,12 +129,26 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 
 func (s *StatsDaemon) RunBare() {
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
+	s.initializeCounters()
 	s.metricsMonitor()
 }
 
-// metricsMonitor basically guards the metrics datastructures.
-// it typically receives metrics on the Metrics channel but also responds to
-// external signals and every flushInterval, computes and flushes the data
+func (s *StatsDaemon) initializeCounters() {
+	c := counters.New(s.prefix_rates)
+	g := gauges.New(s.prefix_gauges)
+	t := timers.New(s.prefix_timers, s.pct)
+	for _, name := range []string{"timer", "gauge", "counter"} {
+		c.Add(&common.Metric{
+			Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.prefix, name),
+			Sampling: 1,
+		})
+	}
+	s.counters.Store(c)
+	s.gauges.Store(g)
+	s.timers.Store(t)
+}
+
+// metricsMonitor responds to external signals and every flushInterval, computes and flushes the data
 func (s *StatsDaemon) metricsMonitor() {
 	period := time.Duration(s.flushInterval) * time.Second
 	tick := ticker.GetAlignedTicker(s.Clock, period)
@@ -115,39 +156,15 @@ func (s *StatsDaemon) metricsMonitor() {
 	var c *counters.Counters
 	var g *gauges.Gauges
 	var t *timers.Timers
-	oneCounter := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", s.prefix),
-		Value:    1,
-		Sampling: 1,
-	}
-	oneGauge := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", s.prefix),
-		Value:    1,
-		Sampling: 1,
-	}
-	oneTimer := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", s.prefix),
-		Value:    1,
-		Sampling: 1,
-	}
 
-	initializeCounters := func() {
-		c = counters.New(s.prefix_rates)
-		g = gauges.New(s.prefix_gauges)
-		t = timers.New(s.prefix_timers, s.pct)
-		for _, name := range []string{"timer", "gauge", "counter"} {
-			c.Add(&common.Metric{
-				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.prefix, name),
-				Sampling: 1,
-			})
-		}
-	}
-	initializeCounters()
 	for {
 		select {
 		case sig := <-s.signalchan:
 			switch sig {
 			case syscall.SIGTERM, syscall.SIGINT:
+				c = s.counters.Load().(*counters.Counters)
+				g = s.gauges.Load().(*gauges.Gauges)
+				t = s.timers.Load().(*timers.Timers)
 				fmt.Printf("!! Caught signal %s... shutting down\n", sig)
 				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
@@ -157,26 +174,33 @@ func (s *StatsDaemon) metricsMonitor() {
 				fmt.Printf("unknown signal %s, ignoring\n", sig)
 			}
 		case <-tick.C:
+			c = s.counters.Load().(*counters.Counters)
+			g = s.gauges.Load().(*gauges.Gauges)
+			t = s.timers.Load().(*timers.Timers)
+			s.initializeCounters()
 			go func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers) {
 				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
 				}
 				s.events.Broadcast <- "flush"
 			}(c, g, t)
-			initializeCounters()
 			tick = ticker.GetAlignedTicker(s.Clock, period)
-		case m := <-s.Metrics:
-			if m.Modifier == "ms" {
-				t.Add(m)
-				c.Add(oneTimer)
-			} else if m.Modifier == "g" {
-				g.Add(m)
-				c.Add(oneGauge)
-			} else {
-				c.Add(m)
-				c.Add(oneCounter)
-			}
 		}
+	}
+}
+func (s *StatsDaemon) AddMetric(m *common.Metric) {
+	c := s.counters.Load().(*counters.Counters)
+	if m.Modifier == "ms" {
+		t := s.timers.Load().(*timers.Timers)
+		t.Add(m)
+		c.Add(s.oneTimer)
+	} else if m.Modifier == "g" {
+		g := s.gauges.Load().(*gauges.Gauges)
+		g.Add(m)
+		c.Add(s.oneGauge)
+	} else {
+		c.Add(m)
+		c.Add(s.oneCounter)
 	}
 }
 
