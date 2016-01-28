@@ -325,6 +325,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 			}
 			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
 		}
+		daemon.Clock.(*clock.Mock).Add(10 * time.Second)
 		totalLock.Lock()
 		if total != float64(1000000) {
 			panic(fmt.Sprintf("didn't see 1M counters. only saw %d", total))
