@@ -361,9 +361,7 @@ func BenchmarkIncomingMetricAmounts(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		for j := 0; j < 100; j++ {
 			for i := 0; i < 1000; i++ {
-				for _, p := range counters {
-					output.MetricAmounts <- common.MetricAmount{p.Bucket, p.Sampling}
-				}
+				daemon.metricAmounts <- counters
 			}
 			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
 		}

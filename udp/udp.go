@@ -125,8 +125,6 @@ func Listener(listen_addr, prefix_internal string, output *common.Output, parse 
 		}
 		metrics := ParseMessage(message[:n], prefix_internal, output, parse)
 		output.Metrics <- metrics
-		for _, p := range metrics {
-			output.MetricAmounts <- common.MetricAmount{p.Bucket, p.Sampling}
-		}
+		output.MetricAmounts <- metrics
 	}
 }

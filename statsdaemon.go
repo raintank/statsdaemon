@@ -43,7 +43,7 @@ type StatsDaemon struct {
 	max_timers_per_s    uint64
 	signalchan          chan os.Signal
 	Metrics             chan []*common.Metric
-	metricAmounts       chan common.MetricAmount
+	metricAmounts       chan []*common.Metric
 	metricStatsRequests chan metricsStatsReq
 	valid_lines         *topic.Topic
 	Invalid_lines       *topic.Topic
@@ -69,7 +69,7 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers
 		max_timers_per_s,
 		signalchan,
 		make(chan []*common.Metric, max_unprocessed),
-		make(chan common.MetricAmount, max_unprocessed),
+		make(chan []*common.Metric, max_unprocessed),
 		make(chan metricsStatsReq),
 		topic.New(),
 		topic.New(),
@@ -289,13 +289,15 @@ func (s *StatsDaemon) metricStatsMonitor() {
 			new_counts := make(map[string]Amounts)
 			cur_counts = &new_counts
 			swap_ts = s.Clock.Now()
-		case s_a := <-s.metricAmounts:
-			el, ok := (*cur_counts)[s_a.Bucket]
-			if ok {
-				el.Seen += 1
-				el.Submitted += uint64(1 / s_a.Sampling)
-			} else {
-				(*cur_counts)[s_a.Bucket] = Amounts{uint64(1 / s_a.Sampling), 1}
+		case metrics := <-s.metricAmounts:
+			for _, metric := range metrics {
+				el, ok := (*cur_counts)[metric.Bucket]
+				if ok {
+					el.Seen += 1
+					el.Submitted += uint64(1 / metric.Sampling)
+				} else {
+					(*cur_counts)[metric.Bucket] = Amounts{uint64(1 / metric.Sampling), 1}
+				}
 			}
 		case req := <-s.metricStatsRequests:
 			current_ts := s.Clock.Now()

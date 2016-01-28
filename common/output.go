@@ -6,7 +6,7 @@ import (
 
 type Output struct {
 	Metrics       chan []*Metric
-	MetricAmounts chan MetricAmount
+	MetricAmounts chan []*Metric
 	Valid_lines   *topic.Topic
 	Invalid_lines *topic.Topic
 }
@@ -14,7 +14,7 @@ type Output struct {
 func NullOutput() *Output {
 	output := Output{
 		Metrics:       make(chan []*Metric),
-		MetricAmounts: make(chan MetricAmount),
+		MetricAmounts: make(chan []*Metric),
 		Valid_lines:   topic.New(),
 		Invalid_lines: topic.New(),
 	}
