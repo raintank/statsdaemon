@@ -115,6 +115,21 @@ func (s *StatsDaemon) metricsMonitor() {
 	var c *counters.Counters
 	var g *gauges.Gauges
 	var t *timers.Timers
+	oneCounter := &common.Metric{
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", s.prefix),
+		Value:    1,
+		Sampling: 1,
+	}
+	oneGauge := &common.Metric{
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", s.prefix),
+		Value:    1,
+		Sampling: 1,
+	}
+	oneTimer := &common.Metric{
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", s.prefix),
+		Value:    1,
+		Sampling: 1,
+	}
 
 	initializeCounters := func() {
 		c = counters.New(s.prefix_rates)
@@ -151,22 +166,16 @@ func (s *StatsDaemon) metricsMonitor() {
 			initializeCounters()
 			tick = ticker.GetAlignedTicker(s.Clock, period)
 		case m := <-s.Metrics:
-			var name string
 			if m.Modifier == "ms" {
 				t.Add(m)
-				name = "timer"
+				c.Add(oneTimer)
 			} else if m.Modifier == "g" {
 				g.Add(m)
-				name = "gauge"
+				c.Add(oneGauge)
 			} else {
 				c.Add(m)
-				name = "counter"
+				c.Add(oneCounter)
 			}
-			c.Add(&common.Metric{
-				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.prefix, name),
-				Value:    1,
-				Sampling: 1,
-			})
 		}
 	}
 }
