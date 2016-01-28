@@ -55,12 +55,16 @@ func main() {
 		panic(err)
 	}
 
-	tick := time.Tick(time.Duration(10) * time.Millisecond)
 	go func() {
-		for range tick {
+		tick := time.Tick(time.Duration(10) * time.Millisecond)
+		for pre := range tick {
 			for i := 0; i < 10000; i++ {
 				cl.Count("test-counter", 1, 1)
 
+			}
+			dur := time.Now().Sub(pre)
+			if dur > time.Duration(5)*time.Millisecond {
+				fmt.Println("sender took %s : possible sender iteration skipped", dur)
 			}
 		}
 	}()
