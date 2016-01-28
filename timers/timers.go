@@ -14,7 +14,7 @@ type Float64Slice []float64
 type Timers struct {
 	prefix string
 	pctls  Percentiles
-	values map[string]Data
+	Values map[string]Data
 }
 
 func New(prefix string, pctls Percentiles) *Timers {
@@ -35,19 +35,19 @@ func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 func (t *Timers) String() string {
-	return fmt.Sprintf("<*Timers %p prefix '%s', percentiles '%s', %d values>", t, t.prefix, t.pctls, len(t.values))
+	return fmt.Sprintf("<*Timers %p prefix '%s', percentiles '%s', %d values>", t, t.prefix, t.pctls, len(t.Values))
 }
 
 // Add updates the timers map, adding the metric key if needed
 func (timers *Timers) Add(metric *common.Metric) {
-	t, ok := timers.values[metric.Bucket]
+	t, ok := timers.Values[metric.Bucket]
 	if !ok {
 		var p Float64Slice
 		t = Data{p, 0}
 	}
 	t.Points = append(t.Points, metric.Value)
 	t.Amount_submitted += int64(1 / metric.Sampling)
-	timers.values[metric.Bucket] = t
+	timers.Values[metric.Bucket] = t
 }
 
 // Process computes the outbound metrics for timers and puts them in the buffer
@@ -66,7 +66,7 @@ func (timers *Timers) Process(buffer *bytes.Buffer, now int64, interval int) int
 	// upper_90 / lower_90
 
 	var num int64
-	for u, t := range timers.values {
+	for u, t := range timers.Values {
 		if len(t.Points) > 0 {
 			seen := len(t.Points)
 			count := t.Amount_submitted
