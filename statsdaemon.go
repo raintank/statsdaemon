@@ -93,7 +93,6 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	go s.adminListener()                                  // tcp admin_addr to handle requests
 	go s.metricStatsMonitor()                             // handles requests fired by telnet api
 	s.metricsMonitor()                                    // takes data from s.Metrics and puts them in the guage/timers/etc objects. pointers guarded by select. also listens for signals.
-	// pointer guarding through atomic.Value probably more efficient.
 }
 
 // start statsdaemon instance, only processing incoming metrics from the channel, and flushing
