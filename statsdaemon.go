@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counters"
 	"github.com/vimeo/statsdaemon/gauges"
+	"github.com/vimeo/statsdaemon/ticker"
 	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
-	"github.com/vimeo/statsdaemon/ticker"
 	"io"
 	"log"
 	"net"
@@ -25,6 +26,8 @@ type metricsStatsReq struct {
 	Conn    *net.Conn
 }
 
+type SubmitFunc func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error
+
 type StatsDaemon struct {
 	instance            string
 	listen_addr         string
@@ -36,8 +39,8 @@ type StatsDaemon struct {
 	prefix_gauges       string
 	pct                 timers.Percentiles
 	flushInterval       int
-    max_unprocessed int
-    max_timers_per_s    uint64
+	max_unprocessed     int
+	max_timers_per_s    uint64
 	signalchan          chan os.Signal
 	Metrics             chan *common.Metric
 	metricAmounts       chan common.MetricAmount
@@ -46,22 +49,24 @@ type StatsDaemon struct {
 	Invalid_lines       *topic.Topic
 	events              *topic.Topic
 	debug               bool
+	Clock               clock.Clock
+	submitFunc          SubmitFunc
 }
 
-func New(instance, listen_addr, admin_addr, graphite_addr, prefix_rates, prefix_timers, prefix_gauges string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool) *StatsDaemon {
+func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool) *StatsDaemon {
 	return &StatsDaemon{
 		instance,
-		listen_addr,
-		admin_addr,
-		graphite_addr,
+		"",
+		"",
+		"",
 		"service_is_statsdaemon.instance_is_" + instance + ".",
 		prefix_rates,
 		prefix_timers,
 		prefix_gauges,
 		pct,
 		flushInterval,
-        max_unprocessed,
-        max_timers_per_s,
+		max_unprocessed,
+		max_timers_per_s,
 		signalchan,
 		make(chan *common.Metric, max_unprocessed),
 		make(chan common.MetricAmount, max_unprocessed),
@@ -70,15 +75,33 @@ func New(instance, listen_addr, admin_addr, graphite_addr, prefix_rates, prefix_
 		topic.New(),
 		topic.New(),
 		debug,
+		nil,
+		nil,
 	}
 }
 
-func (s *StatsDaemon) Run() {
+// start statsdaemon instance with standard network daemon behaviors
+func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
+	s.listen_addr = listen_addr
+	s.admin_addr = admin_addr
+	s.graphite_addr = graphite_addr
+	s.submitFunc = s.GraphiteSubmit
+	s.Clock = clock.New()
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
 	output := &common.Output{s.Metrics, s.metricAmounts, s.valid_lines, s.Invalid_lines}
-	go udp.StatsListener(s.listen_addr, s.prefix, output)
-	go s.adminListener()
-	go s.metricStatsMonitor()
+	go udp.StatsListener(s.listen_addr, s.prefix, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
+	go s.adminListener()                                  // tcp admin_addr to handle requests
+	go s.metricStatsMonitor()                             // handles requests fired by telnet api
+	s.metricsMonitor()                                    // takes data from s.Metrics and puts them in the guage/timers/etc objects. pointers guarded by select. also listens for signals.
+	// pointer guarding through atomic.Value probably more efficient.
+}
+
+// start statsdaemon instance, only processing incoming metrics from the channel, and flushing
+// no admin listener
+// up to you to write to Metrics and metricAmounts channels, and set submitFunc, and set the clock
+
+func (s *StatsDaemon) RunBare() {
+	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
 	s.metricsMonitor()
 }
 
@@ -87,7 +110,7 @@ func (s *StatsDaemon) Run() {
 // external signals and every flushInterval, computes and flushes the data
 func (s *StatsDaemon) metricsMonitor() {
 	period := time.Duration(s.flushInterval) * time.Second
-	tick := ticker.GetAlignedTicker(period)
+	tick := ticker.GetAlignedTicker(s.Clock, period)
 
 	var c *counters.Counters
 	var g *gauges.Gauges
@@ -111,7 +134,7 @@ func (s *StatsDaemon) metricsMonitor() {
 			switch sig {
 			case syscall.SIGTERM, syscall.SIGINT:
 				fmt.Printf("!! Caught signal %s... shutting down\n", sig)
-				if err := s.submit(c, g, t, time.Now().Add(period)); err != nil {
+				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
 				}
 				return
@@ -120,13 +143,13 @@ func (s *StatsDaemon) metricsMonitor() {
 			}
 		case <-tick.C:
 			go func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers) {
-				if err := s.submit(c, g, t, time.Now().Add(period)); err != nil {
+				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
 					log.Printf("ERROR: %s", err)
 				}
 				s.events.Broadcast <- "flush"
 			}(c, g, t)
 			initializeCounters()
-			tick = ticker.GetAlignedTicker(period)
+			tick = ticker.GetAlignedTicker(s.Clock, period)
 		case m := <-s.Metrics:
 			var name string
 			if m.Modifier == "ms" {
@@ -156,9 +179,9 @@ type statsdType interface {
 // instrument wraps around a processing function, and makes sure we track the number of metrics and duration of the call,
 // which it flushes as metrics2.0 metrics to the outgoing buffer.
 func (s *StatsDaemon) instrument(st statsdType, buffer *bytes.Buffer, now int64, name string) (num int64) {
-	time_start := time.Now()
+	time_start := s.Clock.Now()
 	num = st.Process(buffer, now, s.flushInterval)
-	time_end := time.Now()
+	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
 	fmt.Fprintf(buffer, "%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms %f %d\n", s.prefix, name, duration_ms, now)
 	fmt.Fprintf(buffer, "%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps %f %d\n", s.prefix, name, float64(num)/float64(s.flushInterval), now)
@@ -166,10 +189,10 @@ func (s *StatsDaemon) instrument(st statsdType, buffer *bytes.Buffer, now int64,
 }
 
 // submit basically invokes the processing function (instrumented) and tries to buffer to graphite
-func (s *StatsDaemon) submit(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
 	var buffer bytes.Buffer
 
-	now := time.Now().Unix()
+	now := s.Clock.Now().Unix()
 
 	// TODO: in future, buffer up data (with a TTL/max size) and submit later
 	client, err := net.Dial("tcp", s.graphite_addr)
@@ -200,13 +223,13 @@ func (s *StatsDaemon) submit(c *counters.Counters, g *gauges.Gauges, t *timers.T
 		}
 	}
 
-	time_start := time.Now()
+	time_start := s.Clock.Now()
 	_, err = client.Write(buffer.Bytes())
 	if err != nil {
 		errmsg := fmt.Sprintf("failed to write stats - %s", err)
 		return errors.New(errmsg)
 	}
-	time_end := time.Now()
+	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
 	if s.debug {
 		log.Println("submit() successfully finished")
@@ -240,7 +263,7 @@ type Amounts struct {
 // (this way we have the absolute latest information)
 func (s *StatsDaemon) metricStatsMonitor() {
 	period := 10 * time.Second
-	tick := time.NewTicker(period)
+	tick := s.Clock.Ticker(period)
 	// use two maps so we always have enough data shortly after we start a new period
 	// counts would be too low and/or too inaccurate otherwise
 	_countsA := make(map[string]Amounts)
@@ -254,7 +277,7 @@ func (s *StatsDaemon) metricStatsMonitor() {
 			prev_counts = cur_counts
 			new_counts := make(map[string]Amounts)
 			cur_counts = &new_counts
-			swap_ts = time.Now()
+			swap_ts = s.Clock.Now()
 		case s_a := <-s.metricAmounts:
 			el, ok := (*cur_counts)[s_a.Bucket]
 			if ok {
@@ -264,7 +287,7 @@ func (s *StatsDaemon) metricStatsMonitor() {
 				(*cur_counts)[s_a.Bucket] = Amounts{uint64(1 / s_a.Sampling), 1}
 			}
 		case req := <-s.metricStatsRequests:
-			current_ts := time.Now()
+			current_ts := s.Clock.Now()
 			interval := current_ts.Sub(swap_ts).Seconds() + 10
 			var resp bytes.Buffer
 			switch req.Command[0] {
