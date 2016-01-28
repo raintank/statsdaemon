@@ -2,6 +2,8 @@ package statsdaemon
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/bmizerany/assert"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counters"
@@ -288,4 +290,38 @@ func BenchmarkMillionSameTimersAddAndProcess(b *testing.B) {
 		}
 	}
 	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkIncomingMetrics(b *testing.B) {
+	daemon := New("test", "rates.", "timers.", "gauges.", timers.Percentiles{}, 10, 1000, 1000, nil, false)
+	daemon.Clock = clock.NewMock()
+	total := float64(0)
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
+		return nil
+	}
+	go daemon.RunBare()
+	b.ResetTimer()
+	counter := &common.Metric{
+		"test-counter",
+		float64(1),
+		"c",
+		float32(1),
+		0,
+	}
+	// each operation consists of 100x write 10kmetrics + move clock by 1second
+	// simulating a fake 10k metrics/s load, 1M metrics in total over 100s, so 10 flushes
+	for n := 0; n < b.N; n++ {
+		total = 0
+		for j := 0; j < 100; j++ {
+			for i := 0; i < 10000; i++ {
+				daemon.Metrics <- counter
+			}
+			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
+		}
+		if total != float64(1000000) {
+			panic(fmt.Sprintf("didn't see 1M counters. only saw %d", total))
+		}
+	}
+
 }
