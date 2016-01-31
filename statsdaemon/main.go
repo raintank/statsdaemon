@@ -102,7 +102,7 @@ func main() {
 		}()
 	}
 
-	daemon := statsdaemon.New(inst, *listen_addr, *admin_addr, *graphite_addr, *prefix_rates, *prefix_timers, *prefix_gauges, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug)
+	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug)
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)
@@ -112,6 +112,6 @@ func main() {
 			}
 		}()
 	}
-	daemon.Run()
+	daemon.Run(*listen_addr, *admin_addr, *graphite_addr)
 
 }
