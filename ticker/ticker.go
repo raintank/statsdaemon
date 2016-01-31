@@ -1,6 +1,7 @@
 package ticker
 
 import (
+	"github.com/benbjohnson/clock"
 	"time"
 )
 
@@ -22,8 +23,8 @@ func main() {
 // then it will tick at every whole second, or if it's 60s than it's every whole
 // minute. Note that in my testing this is about .0001 to 0.0002 seconds off due
 // to scheduling etc.
-func GetAlignedTicker(period time.Duration) *time.Ticker {
-	unix := time.Now().UnixNano()
+func GetAlignedTicker(c clock.Clock, period time.Duration) *clock.Ticker {
+	unix := c.Now().UnixNano()
 	diff := time.Duration(period - (time.Duration(unix) % period))
-	return time.NewTicker(diff)
+	return c.Ticker(diff)
 }

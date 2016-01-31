@@ -5,16 +5,16 @@ import (
 )
 
 type Output struct {
-	Metrics       chan *Metric
-	MetricAmounts chan MetricAmount
+	Metrics       chan []*Metric
+	MetricAmounts chan []*Metric
 	Valid_lines   *topic.Topic
 	Invalid_lines *topic.Topic
 }
 
 func NullOutput() *Output {
 	output := Output{
-		Metrics:       make(chan *Metric),
-		MetricAmounts: make(chan MetricAmount),
+		Metrics:       make(chan []*Metric),
+		MetricAmounts: make(chan []*Metric),
 		Valid_lines:   topic.New(),
 		Invalid_lines: topic.New(),
 	}

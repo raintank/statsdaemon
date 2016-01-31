@@ -9,7 +9,7 @@ import (
 
 type Counters struct {
 	prefixRates string
-	values      map[string]float64
+	Values      map[string]float64
 }
 
 func New(prefixRates string) *Counters {
@@ -21,13 +21,13 @@ func New(prefixRates string) *Counters {
 
 // Add updates the counters map, adding the metric key if needed
 func (c *Counters) Add(metric *common.Metric) {
-	c.values[metric.Bucket] += metric.Value * float64(1/metric.Sampling)
+	c.Values[metric.Bucket] += metric.Value * float64(1/metric.Sampling)
 }
 
 // processCounters computes the outbound metrics for counters and puts them in the buffer
 func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
 	var num int64
-	for key, val := range c.values {
+	for key, val := range c.Values {
 		val := val / float64(interval)
 		fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
 		num++

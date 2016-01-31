@@ -2,6 +2,8 @@ package statsdaemon
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/bmizerany/assert"
 	"github.com/vimeo/statsdaemon/common"
 	"github.com/vimeo/statsdaemon/counters"
@@ -10,6 +12,7 @@ import (
 	"github.com/vimeo/statsdaemon/udp"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -288,4 +291,81 @@ func BenchmarkMillionSameTimersAddAndProcess(b *testing.B) {
 		}
 	}
 	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkIncomingMetrics(b *testing.B) {
+	daemon := New("test", "rates.", "timers.", "gauges.", timers.Percentiles{}, 10, 1000, 1000, nil, false)
+	daemon.Clock = clock.NewMock()
+	total := float64(0)
+	totalLock := sync.Mutex{}
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+		totalLock.Lock()
+		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
+		totalLock.Unlock()
+		return nil
+	}
+	go daemon.RunBare()
+	b.ResetTimer()
+	counters := make([]*common.Metric, 10)
+	for i := 0; i < 10; i++ {
+		counters[i] = &common.Metric{
+			"test-counter",
+			float64(1),
+			"c",
+			float32(1),
+			0,
+		}
+	}
+	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
+	// simulating a fake 10k metrics/s load, 1M metrics in total over 100+10s, so 11 flushes
+	for n := 0; n < b.N; n++ {
+		totalLock.Lock()
+		total = 0
+		totalLock.Unlock()
+		for j := 0; j < 100; j++ {
+			for i := 0; i < 1000; i++ {
+				daemon.Metrics <- counters
+			}
+			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
+		}
+		daemon.Clock.(*clock.Mock).Add(10 * time.Second)
+		totalLock.Lock()
+		if total != float64(1000000) {
+			panic(fmt.Sprintf("didn't see 1M counters. only saw %d", total))
+		}
+		totalLock.Unlock()
+	}
+
+}
+
+func BenchmarkIncomingMetricAmounts(b *testing.B) {
+	daemon := New("test", "rates.", "timers.", "gauges.", timers.Percentiles{}, 10, 1000, 1000, nil, false)
+	daemon.Clock = clock.NewMock()
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+		return nil
+	}
+	go daemon.RunBare()
+	b.ResetTimer()
+	counters := make([]*common.Metric, 10)
+	for i := 0; i < 10; i++ {
+		counters[i] = &common.Metric{
+			"test-counter",
+			float64(1),
+			"c",
+			float32(1),
+			0,
+		}
+	}
+	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
+	// simulating a fake 10k metrics/s load, 1M metrics in total over 100+10s, so 11 flushes
+	for n := 0; n < b.N; n++ {
+		for j := 0; j < 100; j++ {
+			for i := 0; i < 1000; i++ {
+				daemon.metricAmounts <- counters
+			}
+			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
+		}
+		daemon.Clock.(*clock.Mock).Add(10 * time.Second)
+	}
+
 }
