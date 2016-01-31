@@ -316,8 +316,8 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 			0,
 		}
 	}
-	// each operation consists of 100x write 10kmetrics + move clock by 1second
-	// simulating a fake 10k metrics/s load, 1M metrics in total over 100s, so 10 flushes
+	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
+	// simulating a fake 10k metrics/s load, 1M metrics in total over 100+10s, so 11 flushes
 	for n := 0; n < b.N; n++ {
 		totalLock.Lock()
 		total = 0
