@@ -337,3 +337,37 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	}
 
 }
+
+func BenchmarkIncomingMetricAmounts(b *testing.B) {
+	daemon := New("test", "rates.", "timers.", "gauges.", timers.Percentiles{}, 10, 1000, 1000, nil, false)
+	daemon.Clock = clock.NewMock()
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+		return nil
+	}
+	go daemon.RunBare()
+	b.ResetTimer()
+	counters := make([]*common.Metric, 10)
+	for i := 0; i < 10; i++ {
+		counters[i] = &common.Metric{
+			"test-counter",
+			float64(1),
+			"c",
+			float32(1),
+			0,
+		}
+	}
+	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
+	// simulating a fake 10k metrics/s load, 1M metrics in total over 100+10s, so 11 flushes
+	for n := 0; n < b.N; n++ {
+		for j := 0; j < 100; j++ {
+			for i := 0; i < 1000; i++ {
+				for _, p := range counters {
+					output.MetricAmounts <- common.MetricAmount{p.Bucket, p.Sampling}
+				}
+			}
+			daemon.Clock.(*clock.Mock).Add(1 * time.Second)
+		}
+		daemon.Clock.(*clock.Mock).Add(10 * time.Second)
+	}
+
+}

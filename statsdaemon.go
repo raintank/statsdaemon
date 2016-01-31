@@ -101,6 +101,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 
 func (s *StatsDaemon) RunBare() {
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
+	go s.metricStatsMonitor()
 	s.metricsMonitor()
 }
 
