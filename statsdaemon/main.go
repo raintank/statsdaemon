@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/vimeo/statsdaemon"
-	"github.com/vimeo/statsdaemon/timers"
 	"log"
 	"os"
 	"os/signal"
@@ -12,9 +10,13 @@ import (
 	"runtime/pprof"
 	"strings"
 
-	"github.com/stvp/go-toml-config"
+	"github.com/vimeo/statsdaemon"
+	"github.com/vimeo/statsdaemon/timers"
+
 	"net/http"
 	_ "net/http/pprof"
+
+	"github.com/stvp/go-toml-config"
 )
 
 const (
@@ -27,16 +29,21 @@ const (
 )
 
 var (
-	listen_addr           = config.String("listen_addr", ":8125")
-	admin_addr            = config.String("admin_addr", ":8126")
-	profile_addr          = config.String("profile_addr", ":6060")
-	graphite_addr         = config.String("graphite_addr", "127.0.0.1:2003")
-	flushInterval         = config.Int("flush_interval", 10)
-	processes             = config.Int("processes", 1)
-	instance              = config.String("instance", "null")
-	prefix_rates          = config.String("prefix_rates", "stats.")
-	prefix_timers         = config.String("prefix_timers", "stats.timers.")
-	prefix_gauges         = config.String("prefix_gauges", "stats.gauges.")
+	listen_addr     = config.String("listen_addr", ":8125")
+	admin_addr      = config.String("admin_addr", ":8126")
+	profile_addr    = config.String("profile_addr", ":6060")
+	graphite_addr   = config.String("graphite_addr", "127.0.0.1:2003")
+	flushInterval   = config.Int("flush_interval", 10)
+	processes       = config.Int("processes", 1)
+	instance        = config.String("instance", "null")
+	prefix_rates    = config.String("prefix_rates", "stats.")
+	prefix_counters = config.String("prefix_counters", "stats.counters.")
+	prefix_timers   = config.String("prefix_timers", "stats.timers.")
+	prefix_gauges   = config.String("prefix_gauges", "stats.gauges.")
+
+	send_rates    = config.Bool("send_rates", true)
+	send_counters = config.Bool("send_counters", false)
+
 	percentile_thresholds = config.String("percentile_thresholds", "")
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
 
@@ -102,7 +109,7 @@ func main() {
 		}()
 	}
 
-	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug)
+	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *send_rates, *send_counters)
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)

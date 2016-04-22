@@ -4,6 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
+	"os"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/benbjohnson/clock"
 	"github.com/tv42/topic"
 	"github.com/vimeo/statsdaemon/common"
@@ -12,13 +20,6 @@ import (
 	"github.com/vimeo/statsdaemon/ticker"
 	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
-	"io"
-	"log"
-	"net"
-	"os"
-	"strings"
-	"syscall"
-	"time"
 )
 
 type metricsStatsReq struct {
@@ -35,8 +36,11 @@ type StatsDaemon struct {
 	graphite_addr       string
 	prefix              string
 	prefix_rates        string
+	prefix_counters     string
 	prefix_timers       string
 	prefix_gauges       string
+	send_rates          bool
+	send_counters       bool
 	pct                 timers.Percentiles
 	flushInterval       int
 	max_unprocessed     int
@@ -53,7 +57,7 @@ type StatsDaemon struct {
 	submitFunc          SubmitFunc
 }
 
-func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool) *StatsDaemon {
+func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool, send_rates bool, send_counters bool) *StatsDaemon {
 	return &StatsDaemon{
 		instance,
 		"",
@@ -61,8 +65,11 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges string, pct timers
 		"",
 		"service_is_statsdaemon.instance_is_" + instance + ".",
 		prefix_rates,
+		prefix_counters,
 		prefix_timers,
 		prefix_gauges,
+		send_rates,
+		send_counters,
 		pct,
 		flushInterval,
 		max_unprocessed,
@@ -132,7 +139,7 @@ func (s *StatsDaemon) metricsMonitor() {
 	}
 
 	initializeCounters := func() {
-		c = counters.New(s.prefix_rates)
+		c = counters.New(s.send_rates, s.prefix_rates, s.send_counters, s.prefix_counters)
 		g = gauges.New(s.prefix_gauges)
 		t = timers.New(s.prefix_timers, s.pct)
 		for _, name := range []string{"timer", "gauge", "counter"} {

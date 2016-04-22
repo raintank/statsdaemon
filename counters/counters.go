@@ -3,18 +3,25 @@ package counters
 import (
 	"bytes"
 	"fmt"
+
 	m20 "github.com/metrics20/go-metrics20"
 	"github.com/vimeo/statsdaemon/common"
 )
 
 type Counters struct {
-	prefixRates string
-	Values      map[string]float64
+	prefixRates    string
+	prefixCounters string
+	sendRates      bool
+	sendCounters   bool
+	Values         map[string]float64
 }
 
-func New(prefixRates string) *Counters {
+func New(sendRates bool, prefixRates string, sendCounters bool, prefixCounters string) *Counters {
 	return &Counters{
 		prefixRates,
+		prefixCounters,
+		sendRates,
+		sendCounters,
 		make(map[string]float64),
 	}
 }
@@ -28,8 +35,15 @@ func (c *Counters) Add(metric *common.Metric) {
 func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
 	var num int64
 	for key, val := range c.Values {
-		val := val / float64(interval)
-		fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
+		if c.sendCounters {
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
+		}
+
+		if c.sendRates {
+			val := val / float64(interval)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
+		}
+
 		num++
 	}
 	return num

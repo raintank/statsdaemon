@@ -3,6 +3,12 @@ package statsdaemon
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/benbjohnson/clock"
 	"github.com/bmizerany/assert"
 	"github.com/vimeo/statsdaemon/common"
@@ -10,11 +16,6 @@ import (
 	"github.com/vimeo/statsdaemon/gauges"
 	"github.com/vimeo/statsdaemon/timers"
 	"github.com/vimeo/statsdaemon/udp"
-	"regexp"
-	"strings"
-	"sync"
-	"testing"
-	"time"
 )
 
 var output = common.NullOutput()
@@ -178,7 +179,7 @@ func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
-	c := counters.New("")
+	c := counters.New(true, "", false, "")
 	for _, p := range packets {
 		c.Add(p)
 	}
@@ -222,7 +223,7 @@ func TestLowerPercentile(t *testing.T) {
 func BenchmarkMillionDifferentCountersAddAndProcess(b *testing.B) {
 	metrics := getDifferentCounters(1000000)
 	b.ResetTimer()
-	c := counters.New("bar")
+	c := counters.New(true, "bar", false, "")
 	for i := 0; i < len(metrics); i++ {
 		for n := 0; n < b.N; n++ {
 			c.Add(&metrics[i])
