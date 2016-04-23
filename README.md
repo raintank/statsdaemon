@@ -118,7 +118,7 @@ graphite_addr = "127.0.0.1:2003"
 flush_interval = 60
 
 prefix_rates = "stats."
-prefix_counters = "stats.counters"
+prefix_counters = "stats.counters."
 prefix_timers = "stats.timers."
 prefix_gauges = "stats.gauges."
 
