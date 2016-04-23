@@ -37,14 +37,14 @@ func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 
 	for key, val := range c.Values {
 		if c.sendCounters {
 			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
+			num++
 		}
 
 		if c.sendRates {
 			val := val / float64(interval)
 			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
+			num++
 		}
-
-		num++
 	}
 	return num
 }
