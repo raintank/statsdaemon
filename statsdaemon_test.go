@@ -143,24 +143,24 @@ func TestCountersLegacyNamespaceFalse(t *testing.T) {
 	cnt := counters.New("rates.", "counters.", false, true, true)
 	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
 
-	assert.Equal(t, num, int64(2))
+	assert.Equal(t, num, int64(1))
 	assert.Equal(t, "counters.logins.count 6.000000 1\nrates.logins.rate 0.600000 1\n", dataForGraphite)
 }
 
 func TestCountersLegacyNamespaceTrue(t *testing.T) {
-	cnt := counters.New("rates.", "counters.", true, true, true)
-	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
-
-	assert.Equal(t, num, int64(2))
-	assert.Equal(t, "counters.logins 6.000000 1\nrates.logins 0.600000 1\n", dataForGraphite)
-}
-
-func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
-	cnt := counters.New("rates.", "counters.", true, true, false)
+	cnt := counters.New("stats.", "stats_counts.", true, true, true)
 	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
 
 	assert.Equal(t, num, int64(1))
-	assert.Equal(t, "rates.logins 0.600000 1\n", dataForGraphite)
+	assert.Equal(t, "stats_counts.logins 6.000000 1\nstats.logins 0.600000 1\n", dataForGraphite)
+}
+
+func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
+	cnt := counters.New("stats.", "stats_counts.", true, true, false)
+	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, "stats.logins 0.600000 1\n", dataForGraphite)
 }
 
 func TestUpperPercentile(t *testing.T) {

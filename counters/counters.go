@@ -35,33 +35,14 @@ func (c *Counters) Add(metric *common.Metric) {
 
 // processCounters computes the outbound metrics for counters and puts them in the buffer
 func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
-	var num int64
 	for key, val := range c.Values {
-		if c.legacyNamespace {
-			if c.flushCounts {
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixCounters), val, now)
-				num++
-			}
+		if c.flushCounts {
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters, c.legacyNamespace), val, now)
+		}
 
-			if c.flushRates {
-				val := val / float64(interval)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
-				num++
-			}
-		} else {
-			// legacyNamesace = false
-			// adds `.count`  and `.rate` suffix
-			if c.flushCounts {
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
-				num++
-			}
-
-			if c.flushRates {
-				val := val / float64(interval)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates)+".rate", val, now)
-				num++
-			}
+		if c.flushRates {
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates, c.legacyNamespace), val/float64(interval), now)
 		}
 	}
-	return num
+	return int64(len(c.Values))
 }
