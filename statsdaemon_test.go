@@ -125,12 +125,12 @@ func TestMean(t *testing.T) {
 	assert.Equal(t, matched, true)
 }
 
-func TestCounters(t *testing.T) {
-	// Some data with expected mean of 20
+func TestCountersLegacyNamespaceFalse(t *testing.T) {
+	// Some data with expected sum of 6
 	d := []byte("logins:1|c\nlogins:2|c\nlogins:3|c")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
-	counters := counters.New(true, "rates.", true, "counters.")
+	counters := counters.New("rates.", "counters.", false)
 
 	for _, p := range packets {
 		counters.Add(p)
@@ -141,7 +141,26 @@ func TestCounters(t *testing.T) {
 	assert.Equal(t, num, int64(2))
 	dataForGraphite := buff.String()
 
-	assert.Equal(t, "counters.logins.count 6.000000 1\nrates.logins 0.600000 1\n", dataForGraphite)
+	assert.Equal(t, "counters.logins.count 6.000000 1\nrates.logins.rate 0.600000 1\n", dataForGraphite)
+}
+
+func TestCountersLegacyNamespaceTrue(t *testing.T) {
+	// Some data with expected sum of 6
+	d := []byte("logins:1|c\nlogins:2|c\nlogins:3|c")
+	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+
+	counters := counters.New("rates.", "counters.", true)
+
+	for _, p := range packets {
+		counters.Add(p)
+	}
+
+	var buff bytes.Buffer
+	num := counters.Process(&buff, 1, 10)
+	assert.Equal(t, num, int64(2))
+	dataForGraphite := buff.String()
+
+	assert.Equal(t, "counters.logins 6.000000 1\nrates.logins 0.600000 1\n", dataForGraphite)
 }
 
 func TestUpperPercentile(t *testing.T) {
@@ -198,7 +217,7 @@ func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
-	c := counters.New(true, "", false, "")
+	c := counters.New("", "", true)
 	for _, p := range packets {
 		c.Add(p)
 	}
@@ -242,7 +261,7 @@ func TestLowerPercentile(t *testing.T) {
 func BenchmarkMillionDifferentCountersAddAndProcess(b *testing.B) {
 	metrics := getDifferentCounters(1000000)
 	b.ResetTimer()
-	c := counters.New(true, "bar", false, "")
+	c := counters.New("bar", "", true)
 	for i := 0; i < len(metrics); i++ {
 		for n := 0; n < b.N; n++ {
 			c.Add(&metrics[i])
@@ -314,7 +333,7 @@ func BenchmarkMillionSameTimersAddAndProcess(b *testing.B) {
 }
 
 func BenchmarkIncomingMetrics(b *testing.B) {
-	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true, true)
+	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true)
 	daemon.Clock = clock.NewMock()
 	total := float64(0)
 	totalLock := sync.Mutex{}
@@ -359,7 +378,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 }
 
 func BenchmarkIncomingMetricAmounts(b *testing.B) {
-	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true, true)
+	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true)
 	daemon.Clock = clock.NewMock()
 	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
 		return nil

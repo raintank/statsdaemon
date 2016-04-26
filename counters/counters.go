@@ -9,19 +9,17 @@ import (
 )
 
 type Counters struct {
-	prefixRates    string
-	prefixCounters string
-	sendRates      bool
-	sendCounters   bool
-	Values         map[string]float64
+	prefixRates     string
+	prefixCounters  string
+	legacyNamespace bool
+	Values          map[string]float64
 }
 
-func New(sendRates bool, prefixRates string, sendCounters bool, prefixCounters string) *Counters {
+func New(prefixRates string, prefixCounters string, legacyNamespace bool) *Counters {
 	return &Counters{
 		prefixRates,
 		prefixCounters,
-		sendRates,
-		sendCounters,
+		legacyNamespace,
 		make(map[string]float64),
 	}
 }
@@ -35,15 +33,21 @@ func (c *Counters) Add(metric *common.Metric) {
 func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
 	var num int64
 	for key, val := range c.Values {
-		if c.sendCounters {
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
-			num++
-		}
+		if c.legacyNamespace {
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixCounters), val, now)
 
-		if c.sendRates {
 			val := val / float64(interval)
 			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
-			num++
+
+			num += 2
+		} else {
+			// legacyNamesace = false
+			// adds `.count`  and `.rate` suffix
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
+
+			val := val / float64(interval)
+			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates)+".rate", val, now)
+			num += 2
 		}
 	}
 	return num

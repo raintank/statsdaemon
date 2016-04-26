@@ -37,12 +37,11 @@ var (
 	processes       = config.Int("processes", 1)
 	instance        = config.String("instance", "null")
 	prefix_rates    = config.String("prefix_rates", "stats.")
-	prefix_counters = config.String("prefix_counters", "stats.counters.")
+	prefix_counters = config.String("prefix_counters", "stats_counts.")
 	prefix_timers   = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges   = config.String("prefix_gauges", "stats.gauges.")
 
-	send_rates    = config.Bool("send_rates", true)
-	send_counters = config.Bool("send_counters", false)
+	legacyNamespace = config.Bool("legacyNamespace", true)
 
 	percentile_thresholds = config.String("percentile_thresholds", "")
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
@@ -88,9 +87,14 @@ func main() {
 		defer f.Close()
 		defer pprof.WriteHeapProfile(f)
 	}
-	config.Parse(*config_file)
+
+	err := config.Parse(*config_file)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Could not read config file: %v", err))
+		return
+	}
+
 	runtime.GOMAXPROCS(*processes)
-	var err error
 	pct, err := timers.NewPercentiles(*percentile_thresholds)
 	if err != nil {
 		log.Fatal(err)
@@ -109,7 +113,7 @@ func main() {
 		}()
 	}
 
-	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *send_rates, *send_counters)
+	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *legacyNamespace)
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)
