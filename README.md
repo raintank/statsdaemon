@@ -11,7 +11,8 @@ Metrics aggregation daemon like [statsd](https://github.com/etsy/statsd), in Go 
 Features you expect:
 =======================
 
-For a given input, this implementation yields the exact same metrics as etsy's statsd (with legacy namespace and deleteIdleStats enabled),
+For a given input, this implementation yields the exact same metrics as etsy's statsd (with deleteIdleStats enabled),
+(though this is discouraged. See "metric namespacing" below)
 so it can act as a drop-in replacement.  In terms of types:
 
 * Timing (with optional percentiles, sampling supported)
@@ -109,8 +110,13 @@ Usage of ./statsdaemon:
   -version=false: print version string
 ```
 
-Config file options
-===================
+Namespacing & Config file options
+=================================
+
+The default statsd namespace is notoriously messy
+so we highly recommend disabling the legacy namespace
+and customizing the prefixes as shown below.
+
 ```
 listen_addr = ":8125"
 admin_addr = ":8126"
