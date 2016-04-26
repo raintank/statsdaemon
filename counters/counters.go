@@ -12,14 +12,18 @@ type Counters struct {
 	prefixRates     string
 	prefixCounters  string
 	legacyNamespace bool
+	flushRates      bool
+	flushCounts     bool
 	Values          map[string]float64
 }
 
-func New(prefixRates string, prefixCounters string, legacyNamespace bool) *Counters {
+func New(prefixRates string, prefixCounters string, legacyNamespace, flushRates, flushCounts bool) *Counters {
 	return &Counters{
 		prefixRates,
 		prefixCounters,
 		legacyNamespace,
+		flushRates,
+		flushCounts,
 		make(map[string]float64),
 	}
 }
@@ -34,20 +38,29 @@ func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 
 	var num int64
 	for key, val := range c.Values {
 		if c.legacyNamespace {
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixCounters), val, now)
+			if c.flushCounts {
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixCounters), val, now)
+				num++
+			}
 
-			val := val / float64(interval)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
-
-			num += 2
+			if c.flushRates {
+				val := val / float64(interval)
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates), val, now)
+				num++
+			}
 		} else {
 			// legacyNamesace = false
 			// adds `.count`  and `.rate` suffix
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
+			if c.flushCounts {
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters), val, now)
+				num++
+			}
 
-			val := val / float64(interval)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates)+".rate", val, now)
-			num += 2
+			if c.flushRates {
+				val := val / float64(interval)
+				fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates)+".rate", val, now)
+				num++
+			}
 		}
 	}
 	return num

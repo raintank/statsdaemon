@@ -41,7 +41,9 @@ var (
 	prefix_timers   = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges   = config.String("prefix_gauges", "stats.gauges.")
 
-	legacyNamespace = config.Bool("legacyNamespace", true)
+	legacy_namespace = config.Bool("legacy_namespace", true)
+	flush_rates      = config.Bool("flush_rates", true)
+	flush_counts     = config.Bool("flush_counts", false)
 
 	percentile_thresholds = config.String("percentile_thresholds", "")
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
@@ -113,7 +115,7 @@ func main() {
 		}()
 	}
 
-	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *legacyNamespace)
+	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *legacy_namespace, *flush_rates, *flush_counts)
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)
@@ -124,5 +126,4 @@ func main() {
 		}()
 	}
 	daemon.Run(*listen_addr, *admin_addr, *graphite_addr)
-
 }

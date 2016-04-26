@@ -39,7 +39,9 @@ type StatsDaemon struct {
 	prefix_counters     string
 	prefix_timers       string
 	prefix_gauges       string
-	legacyNamespace     bool
+	legacy_namespace    bool
+	flush_rates         bool
+	flush_counts        bool
 	pct                 timers.Percentiles
 	flushInterval       int
 	max_unprocessed     int
@@ -56,7 +58,7 @@ type StatsDaemon struct {
 	submitFunc          SubmitFunc
 }
 
-func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool, legacyNamespace bool) *StatsDaemon {
+func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool, legacy_namespace bool, flush_rates bool, flush_counts bool) *StatsDaemon {
 	return &StatsDaemon{
 		instance,
 		"",
@@ -67,7 +69,9 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters s
 		prefix_counters,
 		prefix_timers,
 		prefix_gauges,
-		legacyNamespace,
+		legacy_namespace,
+		flush_rates,
+		flush_counts,
 		pct,
 		flushInterval,
 		max_unprocessed,
@@ -137,7 +141,7 @@ func (s *StatsDaemon) metricsMonitor() {
 	}
 
 	initializeCounters := func() {
-		c = counters.New(s.prefix_rates, s.prefix_counters, s.legacyNamespace)
+		c = counters.New(s.prefix_rates, s.prefix_counters, s.legacy_namespace, s.flush_rates, s.flush_counts)
 		g = gauges.New(s.prefix_gauges)
 		t = timers.New(s.prefix_timers, s.pct)
 		for _, name := range []string{"timer", "gauge", "counter"} {

@@ -117,21 +117,26 @@ admin_addr = ":8126"
 graphite_addr = "127.0.0.1:2003"
 flush_interval = 60
 
-legacyNamespace = true
+legacy_namespace = true
 prefix_rates = "stats."
 prefix_counters = "stats_counts."
 prefix_timers = "stats.timers."
 prefix_gauges = "stats.gauges."
 
-# Recommended (legacyNamespace = false)
+# Recommended (legacy_namespace = false)
 # counts -> stats.counters.$metric.count
 # rates -> stats.counters.$metric.rate
 
-#legacyNamespace = false
+#legacy_namespace = false
 #prefix_rates = "stats.counters."
 #prefix_counters = "stats.counters."
 #prefix_timers = "stats.timers."
 #prefix_gauges = "stats.gauges."
+
+# send rates for counters (using prefix_rates)
+flush_rates = true
+# send count for counters (using prefix_counters)
+flush_counts = false
 
 percentile_thresholds = "90,75"
 max_timers_per_s = 1000
