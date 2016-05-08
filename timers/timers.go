@@ -3,7 +3,7 @@ package timers
 import (
 	"bytes"
 	"fmt"
-	m20 "github.com/metrics20/go-metrics20"
+	m20 "github.com/metrics20/go-metrics20/carbon20"
 	"github.com/vimeo/statsdaemon/common"
 	"math"
 	"sort"
