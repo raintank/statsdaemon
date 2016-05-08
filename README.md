@@ -98,6 +98,12 @@ Installing
 go get github.com/Vimeo/statsdaemon/statsdaemon
 ```
 
+
+Building
+========
+
+we use govendor to save the dependencies to the vendor directory.
+
 Command Line Options
 ====================
 
