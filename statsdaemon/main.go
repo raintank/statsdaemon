@@ -9,7 +9,11 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"time"
 
+	"github.com/Dieterbe/profiletrigger/cpu"
+	"github.com/Dieterbe/profiletrigger/heap"
+	"github.com/raintank/raintank-metric/dur"
 	"github.com/vimeo/statsdaemon"
 	"github.com/vimeo/statsdaemon/timers"
 
@@ -47,6 +51,17 @@ var (
 
 	percentile_thresholds = config.String("percentile_thresholds", "")
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
+
+	proftrigPath = config.String("proftrigger_path", "/tmp") // "path to store triggered profiles"
+
+	proftrigHeapFreqStr    = config.String("proftrigger_heap_freq", "60s")    // "inspect status frequency. set to 0 to disable"
+	proftrigHeapMinDiffStr = config.String("proftrigger_heap_min_diff", "1h") // "minimum time between triggered profiles"
+	proftrigHeapThresh     = config.Int("proftrigger_heap_thresh", 10000000)  // "if this many bytes allocated, trigger a profile"
+
+	proftrigCpuFreqStr    = config.String("proftrigger_cpu_freq", "60s")    // "inspect status frequency. set to 0 to disable"
+	proftrigCpuMinDiffStr = config.String("proftrigger_cpu_min_diff", "1h") // "minimum time between triggered profiles"
+	proftrigCpuDurStr     = config.String("proftrigger_cpu_dur", "5s")      // "duration of cpu profile"
+	proftrigCpuThresh     = config.Int("proftrigger_cpu_thresh", 80)        // "if this much percent cpu used, trigger a profile"
 
 	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
 	showVersion = flag.Bool("version", false, "print version string")
@@ -94,6 +109,37 @@ func main() {
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Could not read config file: %v", err))
 		return
+	}
+
+	proftrigHeapFreq := dur.MustParseUsec("proftrigger_heap_freq", *proftrigHeapFreqStr)
+	proftrigHeapMinDiff := int(dur.MustParseUNsec("proftrigger_heap_min_diff", *proftrigHeapMinDiffStr))
+
+	proftrigCpuFreq := dur.MustParseUsec("proftrigger_cpu_freq", *proftrigCpuFreqStr)
+	proftrigCpuMinDiff := int(dur.MustParseUNsec("proftrigger_cpu_min_diff", *proftrigCpuMinDiffStr))
+	proftrigCpuDur := int(dur.MustParseUNsec("proftrigger_cpu_dur", *proftrigCpuDurStr))
+
+	if proftrigHeapFreq > 0 {
+		errors := make(chan error)
+		trigger, _ := heap.New(*proftrigPath, *proftrigHeapThresh, proftrigHeapMinDiff, time.Duration(proftrigHeapFreq)*time.Second, errors)
+		go func() {
+			for e := range errors {
+				log.Printf("profiletrigger heap: %s", e)
+			}
+		}()
+		go trigger.Run()
+	}
+
+	if proftrigCpuFreq > 0 {
+		errors := make(chan error)
+		freq := time.Duration(proftrigCpuFreq) * time.Second
+		duration := time.Duration(proftrigCpuDur) * time.Second
+		trigger, _ := cpu.New(*proftrigPath, *proftrigCpuThresh, proftrigCpuMinDiff, freq, duration, errors)
+		go func() {
+			for e := range errors {
+				log.Printf("profiletrigger cpu: %s", e)
+			}
+		}()
+		go trigger.Run()
 	}
 
 	runtime.GOMAXPROCS(*processes)
