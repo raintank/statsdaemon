@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	VERSION = "0.5.2-alpha"
+	VERSION = "0.6"
 	// number of packets we can read out of udp buffer without processing them
 	// statsdaemon doesn't really interrupt the udp reader like some other statsd's do (like on flush)
 	// but this can still be useful to deal with traffic bursts.
