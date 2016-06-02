@@ -273,7 +273,7 @@ func BenchmarkMillionDifferentCountersAddAndProcess(b *testing.B) {
 func BenchmarkMillionSameCountersAddAndProcess(b *testing.B) {
 	metrics := getSameCounters(1000000)
 	b.ResetTimer()
-	c := gauges.New("bar")
+	c := counters.New("bar", "", true, true, true)
 	for i := 0; i < len(metrics); i++ {
 		for n := 0; n < b.N; n++ {
 			c.Add(&metrics[i])
