@@ -58,7 +58,7 @@ type StatsDaemon struct {
 	submitFunc          SubmitFunc
 }
 
-func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug bool, legacy_namespace bool, flush_rates bool, flush_counts bool) *StatsDaemon {
+func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug, legacy_namespace, flush_rates, flush_counts bool) *StatsDaemon {
 	return &StatsDaemon{
 		instance,
 		"",
