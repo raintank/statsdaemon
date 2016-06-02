@@ -258,76 +258,84 @@ func TestLowerPercentile(t *testing.T) {
 	assert.Equal(t, matched, true)
 }
 
-func BenchmarkMillionDifferentCountersAddAndProcess(b *testing.B) {
-	metrics := getDifferentCounters(1000000)
+func BenchmarkDifferentCountersAddAndProcessNonLegacy(b *testing.B) {
+	metrics := getDifferentCounters(b.N)
 	b.ResetTimer()
 	c := counters.New("bar", "", true, true, false)
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			c.Add(&metrics[i])
-		}
+		c.Add(&metrics[i])
 	}
 	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkMillionSameCountersAddAndProcess(b *testing.B) {
-	metrics := getSameCounters(1000000)
+func BenchmarkDifferentCountersAddAndProcessLegacy(b *testing.B) {
+	metrics := getDifferentCounters(b.N)
 	b.ResetTimer()
 	c := counters.New("bar", "", true, true, true)
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			c.Add(&metrics[i])
-		}
+		c.Add(&metrics[i])
 	}
 	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkMillionDifferentGaugesAddAndProcess(b *testing.B) {
-	metrics := getDifferentGauges(1000000)
+func BenchmarkSameCountersAddAndProcessNonLegacy(b *testing.B) {
+	metrics := getSameCounters(b.N)
+	b.ResetTimer()
+	c := counters.New("bar", "", true, true, false)
+	for i := 0; i < len(metrics); i++ {
+		c.Add(&metrics[i])
+	}
+	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkSameCountersAddAndProcessLegacy(b *testing.B) {
+	metrics := getSameCounters(b.N)
+	b.ResetTimer()
+	c := counters.New("bar", "", true, true, true)
+	for i := 0; i < len(metrics); i++ {
+		c.Add(&metrics[i])
+	}
+	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+}
+
+func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
+	metrics := getDifferentGauges(b.N)
 	b.ResetTimer()
 	g := gauges.New("bar")
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			g.Add(&metrics[i])
-		}
+		g.Add(&metrics[i])
 	}
 	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkMillionSameGaugesAddAndProcess(b *testing.B) {
-	metrics := getSameGauges(1000000)
+func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
+	metrics := getSameGauges(b.N)
 	b.ResetTimer()
 	g := gauges.New("bar")
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			g.Add(&metrics[i])
-		}
+		g.Add(&metrics[i])
 	}
 	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkMillionDifferentTimersAddAndProcess(b *testing.B) {
-	metrics := getDifferentTimers(1000000)
+func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
+	metrics := getDifferentTimers(b.N)
 	b.ResetTimer()
 	pct, _ := timers.NewPercentiles("99")
 	t := timers.New("bar", *pct)
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			t.Add(&metrics[i])
-		}
+		t.Add(&metrics[i])
 	}
 	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
 
-func BenchmarkMillionSameTimersAddAndProcess(b *testing.B) {
-	metrics := getSameTimers(1000000)
+func BenchmarkSameTimersAddAndProcess(b *testing.B) {
+	metrics := getSameTimers(b.N)
 	b.ResetTimer()
 	pct, _ := timers.NewPercentiles("99")
 	t := timers.New("bar", *pct)
 	for i := 0; i < len(metrics); i++ {
-		for n := 0; n < b.N; n++ {
-			t.Add(&metrics[i])
-		}
+		t.Add(&metrics[i])
 	}
 	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
 }
