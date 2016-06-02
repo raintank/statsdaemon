@@ -193,33 +193,33 @@ func (s *StatsDaemon) metricsMonitor() {
 
 type statsdType interface {
 	Add(metric *common.Metric)
-	Process(buffer *bytes.Buffer, now int64, interval int) int64
+	Process(buf []byte, now int64, interval int) ([]byte, int64)
 }
 
 // instrument wraps around a processing function, and makes sure we track the number of metrics and duration of the call,
 // which it flushes as metrics2.0 metrics to the outgoing buffer.
-func (s *StatsDaemon) instrument(st statsdType, buffer *bytes.Buffer, now int64, name string) (num int64) {
+func (s *StatsDaemon) instrument(st statsdType, buf []byte, now int64, name string) ([]byte, int64) {
 	time_start := s.Clock.Now()
-	num = st.Process(buffer, now, s.flushInterval)
+	buf, num := st.Process(buf, now, s.flushInterval)
 	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	fmt.Fprintf(buffer, "%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms %f %d\n", s.prefix, name, duration_ms, now)
-	fmt.Fprintf(buffer, "%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps %f %d\n", s.prefix, name, float64(num)/float64(s.flushInterval), now)
-	return
+	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms", s.prefix, name)), duration_ms, now)
+	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps", s.prefix, name)), float64(num)/float64(s.flushInterval), now)
+	return buf, num
 }
 
 // submit basically invokes the processing function (instrumented) and tries to buffer to graphite
 func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
-	var buffer bytes.Buffer
+	buf := make([]byte, 0)
 
 	now := s.Clock.Now().Unix()
 
 	// TODO: in future, buffer up data (with a TTL/max size) and submit later
 	client, err := net.Dial("tcp", s.graphite_addr)
 	if err != nil {
-		c.Process(&buffer, now, s.flushInterval)
-		g.Process(&buffer, now, s.flushInterval)
-		t.Process(&buffer, now, s.flushInterval)
+		buf, _ = c.Process(buf, now, s.flushInterval)
+		buf, _ = g.Process(buf, now, s.flushInterval)
+		buf, _ = t.Process(buf, now, s.flushInterval)
 		errmsg := fmt.Sprintf("dialing %s failed - %s", s.graphite_addr, err.Error())
 		return errors.New(errmsg)
 	}
@@ -230,12 +230,12 @@ func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *
 		errmsg := fmt.Sprintf("could not set deadline - %s", err.Error())
 		return errors.New(errmsg)
 	}
-	s.instrument(c, &buffer, now, "counter")
-	s.instrument(g, &buffer, now, "gauge")
-	s.instrument(t, &buffer, now, "timer")
+	buf, _ = s.instrument(c, buf, now, "counter")
+	buf, _ = s.instrument(g, buf, now, "gauge")
+	buf, _ = s.instrument(t, buf, now, "timer")
 
 	if s.debug {
-		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
+		for _, line := range bytes.Split(buf, []byte("\n")) {
 			if len(line) == 0 {
 				continue
 			}
@@ -244,7 +244,7 @@ func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *
 	}
 
 	time_start := s.Clock.Now()
-	_, err = client.Write(buffer.Bytes())
+	_, err = client.Write(buf)
 	if err != nil {
 		errmsg := fmt.Sprintf("failed to write stats - %s", err)
 		return errors.New(errmsg)
@@ -255,9 +255,9 @@ func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *
 		log.Println("submit() successfully finished")
 	}
 
-	buffer.Reset()
-	fmt.Fprintf(&buffer, "%starget_type_is_gauge.type_is_send.unit_is_ms %f %d\n", s.prefix, duration_ms, now)
-	_, err = client.Write(buffer.Bytes())
+	buf = buf[:0]
+	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.prefix)), duration_ms, now)
+	_, err = client.Write(buf)
 	if err != nil {
 		errmsg := fmt.Sprintf("failed to write target_type_is_gauge.type_is_send.unit_is_ms - %s", err)
 		return errors.New(errmsg)
@@ -311,7 +311,7 @@ func (s *StatsDaemon) metricStatsMonitor() {
 		case req := <-s.metricStatsRequests:
 			current_ts := s.Clock.Now()
 			interval := current_ts.Sub(swap_ts).Seconds() + 10
-			var resp bytes.Buffer
+			var buf []byte
 			switch req.Command[0] {
 			case "sample_rate":
 				bucket := req.Command[1]
@@ -330,15 +330,15 @@ func (s *StatsDaemon) metricStatsMonitor() {
 				if uint64(submitted_per_s) > s.max_timers_per_s {
 					ideal_sample_rate = float64(s.max_timers_per_s) / submitted_per_s
 				}
-				fmt.Fprintf(&resp, "%s %f %f\n", bucket, ideal_sample_rate, submitted_per_s)
+				buf = append(buf, []byte(fmt.Sprintf("%s %f %f\n", bucket, ideal_sample_rate, submitted_per_s))...)
 				// this needs to be less realtime, so for simplicity (and performance?) we just use the prev 10s bucket.
 			case "metric_stats":
 				for bucket, el := range *prev_counts {
-					fmt.Fprintf(&resp, "%s %f %f\n", bucket, float64(el.Submitted)/10, float64(el.Seen)/10)
+					buf = append(buf, []byte(fmt.Sprintf("%s %f %f\n", bucket, float64(el.Submitted)/10, float64(el.Seen)/10))...)
 				}
 			}
 
-			go s.handleApiRequest(*req.Conn, resp)
+			go s.handleApiRequest(*req.Conn, buf)
 		}
 	}
 }
@@ -369,8 +369,10 @@ commands:
 // some operations need to be performed by a Monitor, so we write the request into a channel along with
 // the connection.  the monitor will handle the request when it gets to it, and invoke this function again
 // so we can resume handling a request.
-func (s *StatsDaemon) handleApiRequest(conn net.Conn, write_first bytes.Buffer) {
-	write_first.WriteTo(conn)
+func (s *StatsDaemon) handleApiRequest(conn net.Conn, write_first []byte) {
+	if write_first != nil {
+		conn.Write(write_first)
+	}
 	// Make a buffer to hold incoming data.
 	buf := make([]byte, 1024)
 	// Read the incoming connection into the buffer.
@@ -457,6 +459,6 @@ func (s *StatsDaemon) adminListener() {
 			fmt.Println("Error accepting: ", err.Error())
 			os.Exit(1)
 		}
-		go s.handleApiRequest(conn, bytes.Buffer{})
+		go s.handleApiRequest(conn, nil)
 	}
 }

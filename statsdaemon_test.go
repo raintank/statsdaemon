@@ -1,9 +1,7 @@
 package statsdaemon
 
 import (
-	"bytes"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -114,15 +112,14 @@ func TestMean(t *testing.T) {
 	for _, p := range packets {
 		ti.Add(p)
 	}
-	var buff bytes.Buffer
-	num := ti.Process(&buff, time.Now().Unix(), 60)
+	var buf []byte
+	buf, num := ti.Process(buf, time.Now().Unix(), 60)
 	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
-	pattern := `response_time\.mean 20\.[0-9]+ `
-	meanRegexp := regexp.MustCompile(pattern)
-
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	exp := "response_time.mean 20 "
+	got := string(buf)
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
 }
 
 func getGraphiteSendForCounter(cnt *counters.Counters, input string) (string, int64) {
@@ -134,9 +131,9 @@ func getGraphiteSendForCounter(cnt *counters.Counters, input string) (string, in
 		cnt.Add(p)
 	}
 
-	var buff bytes.Buffer
-	num := cnt.Process(&buff, 1, 10)
-	return buff.String(), num
+	var buf []byte
+	buf, num := cnt.Process(buf, 1, 10)
+	return string(buf), num
 }
 
 func TestCountersLegacyNamespaceFalse(t *testing.T) {
@@ -144,7 +141,7 @@ func TestCountersLegacyNamespaceFalse(t *testing.T) {
 	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
 
 	assert.Equal(t, num, int64(1))
-	assert.Equal(t, "counters.logins.count 6.000000 1\nrates.logins.rate 0.600000 1\n", dataForGraphite)
+	assert.Equal(t, "counters.logins.count 6 1\nrates.logins.rate 0.6 1\n", dataForGraphite)
 }
 
 func TestCountersLegacyNamespaceTrue(t *testing.T) {
@@ -152,7 +149,7 @@ func TestCountersLegacyNamespaceTrue(t *testing.T) {
 	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
 
 	assert.Equal(t, num, int64(1))
-	assert.Equal(t, "stats_counts.logins 6.000000 1\nstats.logins 0.600000 1\n", dataForGraphite)
+	assert.Equal(t, "stats_counts.logins 6 1\nstats.logins 0.6 1\n", dataForGraphite)
 }
 
 func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
@@ -160,11 +157,10 @@ func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
 	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
 
 	assert.Equal(t, num, int64(1))
-	assert.Equal(t, "stats.logins 0.600000 1\n", dataForGraphite)
+	assert.Equal(t, "stats.logins 0.6 1\n", dataForGraphite)
 }
 
 func TestUpperPercentile(t *testing.T) {
-	// Some data with expected mean of 20
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
@@ -175,14 +171,15 @@ func TestUpperPercentile(t *testing.T) {
 		ti.Add(p)
 	}
 
-	var buff bytes.Buffer
-	num := ti.Process(&buff, time.Now().Unix(), 60)
+	var buf []byte
+	buf, num := ti.Process(buf, time.Now().Unix(), 60)
 	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
 
-	meanRegexp := regexp.MustCompile(`time\.upper_75 2\.`)
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	exp := "time.upper_75 2 "
+	got := string(buf)
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
 }
 
 func TestMetrics20Timer(t *testing.T) {
@@ -196,22 +193,22 @@ func TestMetrics20Timer(t *testing.T) {
 		ti.Add(p)
 	}
 
-	var buff bytes.Buffer
-	num := ti.Process(&buff, time.Now().Unix(), 10)
+	var buf []byte
+	buf, num := ti.Process(buf, time.Now().Unix(), 10)
 	assert.Equal(t, int(num), 1)
 
-	dataForGraphite := buff.String()
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max_75 10.000000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean_75 7.500000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum_75 15.000000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean 7.500000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=median 7.500000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=std 2.500000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum 15.000000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max 10.000000"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=min 5.000000"))
+	dataForGraphite := string(buf)
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max_75 10"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean_75 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum_75 15"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=median 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=std 2.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum 15"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max 10"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=min 5"))
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.200000"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.2"))
 }
 func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
@@ -222,16 +219,15 @@ func TestMetrics20Count(t *testing.T) {
 		c.Add(p)
 	}
 
-	var buff bytes.Buffer
+	var buf []byte
 	var num int64
-	num += c.Process(&buff, time.Now().Unix(), 10)
+	buf, n := c.Process(buf, time.Now().Unix(), 10)
+	num += n
 
-	dataForGraphite := buff.String()
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Bps 1.5"))
+	assert.T(t, strings.Contains(string(buf), "foo=bar.target_type=rate.unit=Bps 1.5"))
 }
 
 func TestLowerPercentile(t *testing.T) {
-	// Some data with expected mean of 20
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
 	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
 
@@ -242,20 +238,23 @@ func TestLowerPercentile(t *testing.T) {
 		ti.Add(p)
 	}
 
-	var buff bytes.Buffer
+	var buf []byte
 	var num int64
-	num += ti.Process(&buff, time.Now().Unix(), 10)
+	buf, n := ti.Process(buf, time.Now().Unix(), 10)
+	num += n
 
 	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
 
-	meanRegexp := regexp.MustCompile(`time\.upper_75 1\.`)
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, false)
+	exp := "time.upper_75 1 "
+	got := string(buf)
+	if strings.Contains(got, exp) {
+		t.Fatalf("output %q contains %q", got, exp)
+	}
 
-	meanRegexp = regexp.MustCompile(`time\.lower_75 1\.`)
-	matched = meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	exp = "time.lower_75 1 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
 }
 
 func BenchmarkDifferentCountersAddAndProcessNonLegacy(b *testing.B) {
@@ -265,7 +264,7 @@ func BenchmarkDifferentCountersAddAndProcessNonLegacy(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkDifferentCountersAddAndProcessLegacy(b *testing.B) {
@@ -275,7 +274,7 @@ func BenchmarkDifferentCountersAddAndProcessLegacy(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkSameCountersAddAndProcessNonLegacy(b *testing.B) {
@@ -285,7 +284,7 @@ func BenchmarkSameCountersAddAndProcessNonLegacy(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkSameCountersAddAndProcessLegacy(b *testing.B) {
@@ -295,7 +294,7 @@ func BenchmarkSameCountersAddAndProcessLegacy(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
@@ -305,7 +304,7 @@ func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		g.Add(&metrics[i])
 	}
-	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	g.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
@@ -315,7 +314,7 @@ func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		g.Add(&metrics[i])
 	}
-	g.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	g.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
@@ -326,7 +325,7 @@ func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		t.Add(&metrics[i])
 	}
-	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	t.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkSameTimersAddAndProcess(b *testing.B) {
@@ -337,7 +336,7 @@ func BenchmarkSameTimersAddAndProcess(b *testing.B) {
 	for i := 0; i < len(metrics); i++ {
 		t.Add(&metrics[i])
 	}
-	t.Process(&bytes.Buffer{}, time.Now().Unix(), 10)
+	t.Process(make([]byte, 0), time.Now().Unix(), 10)
 }
 
 func BenchmarkIncomingMetrics(b *testing.B) {

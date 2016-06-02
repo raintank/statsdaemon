@@ -1,9 +1,6 @@
 package counters
 
 import (
-	"bytes"
-	"fmt"
-
 	m20 "github.com/metrics20/go-metrics20/carbon20"
 	"github.com/vimeo/statsdaemon/common"
 )
@@ -34,15 +31,15 @@ func (c *Counters) Add(metric *common.Metric) {
 }
 
 // processCounters computes the outbound metrics for counters and puts them in the buffer
-func (c *Counters) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
+func (c *Counters) Process(buf []byte, now int64, interval int) ([]byte, int64) {
 	for key, val := range c.Values {
 		if c.flushCounts {
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Count(key, c.prefixCounters, c.legacyNamespace), val, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Count(key, c.prefixCounters, c.legacyNamespace)), val, now)
 		}
 
 		if c.flushRates {
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.DeriveCount(key, c.prefixRates, c.legacyNamespace), val/float64(interval), now)
+			buf = common.WriteFloat64(buf, []byte(m20.DeriveCount(key, c.prefixRates, c.legacyNamespace)), val/float64(interval), now)
 		}
 	}
-	return int64(len(c.Values))
+	return buf, int64(len(c.Values))
 }

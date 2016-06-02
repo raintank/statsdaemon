@@ -1,8 +1,6 @@
 package gauges
 
 import (
-	"bytes"
-	"fmt"
 	m20 "github.com/metrics20/go-metrics20/carbon20"
 	"github.com/vimeo/statsdaemon/common"
 )
@@ -25,11 +23,11 @@ func (g *Gauges) Add(metric *common.Metric) {
 }
 
 // Process puts gauges in the outbound buffer
-func (g *Gauges) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
+func (g *Gauges) Process(buf []byte, now int64, interval int) ([]byte, int64) {
 	var num int64
 	for key, val := range g.Values {
-		fmt.Fprintf(buffer, "%s %f %d\n", m20.Gauge(key, g.prefix), val, now)
+		buf = common.WriteFloat64(buf, []byte(m20.Gauge(key, g.prefix)), val, now)
 		num++
 	}
-	return num
+	return buf, num
 }

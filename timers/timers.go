@@ -1,12 +1,12 @@
 package timers
 
 import (
-	"bytes"
 	"fmt"
-	m20 "github.com/metrics20/go-metrics20/carbon20"
-	"github.com/vimeo/statsdaemon/common"
 	"math"
 	"sort"
+
+	m20 "github.com/metrics20/go-metrics20/carbon20"
+	"github.com/vimeo/statsdaemon/common"
 )
 
 type Float64Slice []float64
@@ -51,7 +51,7 @@ func (timers *Timers) Add(metric *common.Metric) {
 }
 
 // Process computes the outbound metrics for timers and puts them in the buffer
-func (timers *Timers) Process(buffer *bytes.Buffer, now int64, interval int) int64 {
+func (timers *Timers) Process(buf []byte, now int64, interval int) ([]byte, int64) {
 	// these are the metrics that get exposed:
 	// count estimate of original amount of metrics sent, by dividing received by samplerate
 	// count_ps  same but per second
@@ -136,20 +136,20 @@ func (timers *Timers) Process(buffer *bytes.Buffer, now int64, interval int) int
 					pctstr = pct.str[1:]
 					fn = m20.Min
 				}
-				fmt.Fprintf(buffer, "%s %f %d\n", fn(u, timers.prefix, pctstr, ""), maxAtThreshold, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, timers.prefix, pctstr, ""), mean_pct, now)
-				fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, timers.prefix, pctstr, ""), sum_pct, now)
+				buf = common.WriteFloat64(buf, []byte(fn(u, timers.prefix, pctstr, "")), maxAtThreshold, now)
+				buf = common.WriteFloat64(buf, []byte(m20.Mean(u, timers.prefix, pctstr, "")), mean_pct, now)
+				buf = common.WriteFloat64(buf, []byte(m20.Sum(u, timers.prefix, pctstr, "")), sum_pct, now)
 			}
 
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Mean(u, timers.prefix, "", ""), mean, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Median(u, timers.prefix, "", ""), median, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Std(u, timers.prefix, "", ""), stddev, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Sum(u, timers.prefix, "", ""), sum, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Max(u, timers.prefix, "", ""), max, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.Min(u, timers.prefix, "", ""), min, now)
-			fmt.Fprintf(buffer, "%s %d %d\n", m20.CountPckt(u, timers.prefix), count, now)
-			fmt.Fprintf(buffer, "%s %f %d\n", m20.RatePckt(u, timers.prefix), count_ps, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Mean(u, timers.prefix, "", "")), mean, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Median(u, timers.prefix, "", "")), median, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Std(u, timers.prefix, "", "")), stddev, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Sum(u, timers.prefix, "", "")), sum, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Max(u, timers.prefix, "", "")), max, now)
+			buf = common.WriteFloat64(buf, []byte(m20.Min(u, timers.prefix, "", "")), min, now)
+			buf = common.WriteInt64(buf, []byte(m20.CountPckt(u, timers.prefix)), count, now)
+			buf = common.WriteFloat64(buf, []byte(m20.RatePckt(u, timers.prefix)), count_ps, now)
 		}
 	}
-	return num
+	return buf, num
 }
