@@ -80,7 +80,6 @@ func ParseMessage(data []byte, prefix_internal string, output *common.Output, pa
 				float64(1),
 				"c",
 				float32(1),
-				0,
 			}
 		} else {
 			// data will be repurposed by the udpListener

@@ -352,7 +352,6 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 			float64(1),
 			"c",
 			float32(1),
-			0,
 		}
 	}
 	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
@@ -392,7 +391,6 @@ func BenchmarkIncomingMetricAmounts(b *testing.B) {
 			float64(1),
 			"c",
 			float32(1),
-			0,
 		}
 	}
 	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)

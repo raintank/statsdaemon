@@ -13,7 +13,7 @@ func getDifferentCounters(amount int) []common.Metric {
 		bucket := "count" + strconv.Itoa(i)
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "c", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "c", sampling}
 	}
 	return metrics
 }
@@ -25,7 +25,7 @@ func getSameCounters(amount int) []common.Metric {
 		bucket := "count"
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "c", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "c", sampling}
 	}
 	return metrics
 }
@@ -37,7 +37,7 @@ func getDifferentGauges(amount int) []common.Metric {
 		bucket := "gauge" + strconv.Itoa(i)
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "g", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "g", sampling}
 	}
 	return metrics
 }
@@ -49,7 +49,7 @@ func getSameGauges(amount int) []common.Metric {
 		bucket := "gauge"
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "g", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "g", sampling}
 	}
 	return metrics
 }
@@ -61,7 +61,7 @@ func getDifferentTimers(amount int) []common.Metric {
 		bucket := "timer" + strconv.Itoa(i)
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "ms", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "ms", sampling}
 	}
 	return metrics
 }
@@ -73,7 +73,7 @@ func getSameTimers(amount int) []common.Metric {
 		bucket := "timer"
 		val := r.Float64()
 		sampling := r.Float32()
-		metrics[i] = common.Metric{bucket, val, "ms", sampling, 0}
+		metrics[i] = common.Metric{bucket, val, "ms", sampling}
 	}
 	return metrics
 }
