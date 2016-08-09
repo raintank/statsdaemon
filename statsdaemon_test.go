@@ -344,11 +344,10 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	daemon.Clock = clock.NewMock()
 	total := float64(0)
 	totalLock := sync.Mutex{}
-	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
 		totalLock.Lock()
 		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
 		totalLock.Unlock()
-		return nil
 	}
 	go daemon.RunBare()
 	b.ResetTimer()
@@ -386,8 +385,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 func BenchmarkIncomingMetricAmounts(b *testing.B) {
 	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true, true, false)
 	daemon.Clock = clock.NewMock()
-	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
-		return nil
+	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
 	}
 	go daemon.RunBare()
 	b.ResetTimer()
