@@ -2,13 +2,13 @@ package statsdaemon
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,7 +27,7 @@ type metricsStatsReq struct {
 	Conn    *net.Conn
 }
 
-type SubmitFunc func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error
+type SubmitFunc func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time)
 
 type StatsDaemon struct {
 	instance            string
@@ -56,6 +56,7 @@ type StatsDaemon struct {
 	debug               bool
 	Clock               clock.Clock
 	submitFunc          SubmitFunc
+	graphiteQueue       chan []byte
 }
 
 func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters string, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal, debug, legacy_namespace, flush_rates, flush_counts bool) *StatsDaemon {
@@ -86,6 +87,7 @@ func New(instance, prefix_rates, prefix_timers, prefix_gauges, prefix_counters s
 		debug,
 		nil,
 		nil,
+		nil,
 	}
 }
 
@@ -94,13 +96,15 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.listen_addr = listen_addr
 	s.admin_addr = admin_addr
 	s.graphite_addr = graphite_addr
-	s.submitFunc = s.GraphiteSubmit
+	s.submitFunc = s.GraphiteQueue
 	s.Clock = clock.New()
+	s.graphiteQueue = make(chan []byte, 1000)
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
 	output := &common.Output{s.Metrics, s.metricAmounts, s.valid_lines, s.Invalid_lines}
 	go udp.StatsListener(s.listen_addr, s.prefix, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
 	go s.adminListener()                                  // tcp admin_addr to handle requests
 	go s.metricStatsMonitor()                             // handles requests fired by telnet api
+	go s.graphiteWriter()                                 // writes to graphite in the background
 	s.metricsMonitor()                                    // takes data from s.Metrics and puts them in the guage/timers/etc objects. pointers guarded by select. also listens for signals.
 }
 
@@ -158,18 +162,14 @@ func (s *StatsDaemon) metricsMonitor() {
 			switch sig {
 			case syscall.SIGTERM, syscall.SIGINT:
 				fmt.Printf("!! Caught signal %s... shutting down\n", sig)
-				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
-					log.Printf("ERROR: %s", err)
-				}
+				s.submitFunc(c, g, t, s.Clock.Now().Add(period))
 				return
 			default:
 				fmt.Printf("unknown signal %s, ignoring\n", sig)
 			}
 		case <-tick.C:
 			go func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers) {
-				if err := s.submitFunc(c, g, t, s.Clock.Now().Add(period)); err != nil {
-					log.Printf("ERROR: %s", err)
-				}
+				s.submitFunc(c, g, t, s.Clock.Now().Add(period))
 				s.events.Broadcast <- "flush"
 			}(c, g, t)
 			initializeCounters()
@@ -208,62 +208,114 @@ func (s *StatsDaemon) instrument(st statsdType, buf []byte, now int64, name stri
 	return buf, num
 }
 
-// submit basically invokes the processing function (instrumented) and tries to buffer to graphite
-func (s *StatsDaemon) GraphiteSubmit(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) error {
+// graphiteWriter is the background workers that connects to graphite and submits all pending data to it
+// TODO: conn.Write() returns no error for a while when the remote endpoint is down, the reconnect happens with a delay
+func (s *StatsDaemon) graphiteWriter() {
+	lock := &sync.Mutex{}
+	connectTicker := s.Clock.Tick(2 * time.Second)
+	var conn net.Conn
+	var err error
+	go func() {
+		for range connectTicker {
+			lock.Lock()
+			if conn == nil {
+				conn, err = net.Dial("tcp", s.graphite_addr)
+				if err == nil {
+					log.Printf("now connected to %s", s.graphite_addr)
+				} else {
+					log.Printf("WARN: dialing %s failed: %s. will retry", s.graphite_addr, err.Error())
+				}
+			}
+			lock.Unlock()
+		}
+	}()
+	for buf := range s.graphiteQueue {
+		lock.Lock()
+		haveConn := (conn != nil)
+		lock.Unlock()
+		for !haveConn {
+			s.Clock.Sleep(time.Second)
+			lock.Lock()
+			haveConn = (conn != nil)
+			lock.Unlock()
+		}
+		if s.debug {
+			for _, line := range bytes.Split(buf, []byte("\n")) {
+				if len(line) == 0 {
+					continue
+				}
+				log.Printf("DEBUG: WRITING %s", line)
+			}
+		}
+		ok := false
+		var duration float64
+		var pre time.Time
+		for !ok {
+			pre = s.Clock.Now()
+			lock.Lock()
+			_, err = conn.Write(buf)
+			if err == nil {
+				ok = true
+				duration = float64(s.Clock.Now().Sub(pre).Nanoseconds()) / float64(1000000)
+				if s.debug {
+					log.Println("DEBUG: wrote metrics payload to graphite!")
+				}
+			} else {
+				log.Printf("failed to write to graphite: %s (took %s). will retry...", err, s.Clock.Now().Sub(pre))
+				conn.Close()
+				conn = nil
+				haveConn = false
+			}
+			lock.Unlock()
+			for !ok && !haveConn {
+				s.Clock.Sleep(2 * time.Second)
+				lock.Lock()
+				haveConn = (conn != nil)
+				lock.Unlock()
+			}
+		}
+		buf = buf[:0]
+		buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.prefix)), duration, pre.Unix())
+		ok = false
+		for !ok {
+			lock.Lock()
+			_, err = conn.Write(buf)
+			if err == nil {
+				ok = true
+				if s.debug {
+					log.Println("DEBUG: wrote sendtime to graphite!")
+				}
+			} else {
+				log.Printf("failed to write target_type_is_gauge.type_is_send.unit_is_ms: %s. will retry...", err)
+				conn.Close()
+				conn = nil
+				haveConn = false
+			}
+			lock.Unlock()
+			for !ok && !haveConn {
+				s.Clock.Sleep(2 * time.Second)
+				lock.Lock()
+				haveConn = (conn != nil)
+				lock.Unlock()
+			}
+		}
+	}
+	lock.Lock()
+	if conn != nil {
+		conn.Close()
+	}
+	lock.Unlock()
+}
+
+// GraphiteQuepue invokes the processing function (instrumented) and enqueues data for writing to graphite
+func (s *StatsDaemon) GraphiteQueue(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
 	buf := make([]byte, 0)
 
 	now := s.Clock.Now().Unix()
-
-	// TODO: in future, buffer up data (with a TTL/max size) and submit later
-	client, err := net.Dial("tcp", s.graphite_addr)
-	if err != nil {
-		buf, _ = c.Process(buf, now, s.flushInterval)
-		buf, _ = g.Process(buf, now, s.flushInterval)
-		buf, _ = t.Process(buf, now, s.flushInterval)
-		errmsg := fmt.Sprintf("dialing %s failed - %s", s.graphite_addr, err.Error())
-		return errors.New(errmsg)
-	}
-	defer client.Close()
-
-	err = client.SetDeadline(deadline)
-	if err != nil {
-		errmsg := fmt.Sprintf("could not set deadline - %s", err.Error())
-		return errors.New(errmsg)
-	}
 	buf, _ = s.instrument(c, buf, now, "counter")
 	buf, _ = s.instrument(g, buf, now, "gauge")
 	buf, _ = s.instrument(t, buf, now, "timer")
-
-	if s.debug {
-		for _, line := range bytes.Split(buf, []byte("\n")) {
-			if len(line) == 0 {
-				continue
-			}
-			log.Printf("DEBUG: WRITING %s", line)
-		}
-	}
-
-	time_start := s.Clock.Now()
-	_, err = client.Write(buf)
-	if err != nil {
-		errmsg := fmt.Sprintf("failed to write stats - %s", err)
-		return errors.New(errmsg)
-	}
-	time_end := s.Clock.Now()
-	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	if s.debug {
-		log.Println("submit() successfully finished")
-	}
-
-	buf = buf[:0]
-	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.prefix)), duration_ms, now)
-	_, err = client.Write(buf)
-	if err != nil {
-		errmsg := fmt.Sprintf("failed to write target_type_is_gauge.type_is_send.unit_is_ms - %s", err)
-		return errors.New(errmsg)
-	}
-
-	return nil
+	s.graphiteQueue <- buf
 }
 
 // Amounts is a datastructure to track numbers of packets, in particular:
@@ -390,7 +442,7 @@ func (s *StatsDaemon) handleApiRequest(conn net.Conn, write_first []byte) {
 		clean_cmd := strings.TrimSpace(string(buf[:n]))
 		command := strings.Split(clean_cmd, " ")
 		if s.debug {
-			log.Println("[api] received command: '" + clean_cmd + "'")
+			log.Println("DEBUG: [api] received command: '" + clean_cmd + "'")
 		}
 		switch command[0] {
 		case "sample_rate":
