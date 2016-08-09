@@ -13,7 +13,7 @@ import (
 
 	"github.com/Dieterbe/profiletrigger/cpu"
 	"github.com/Dieterbe/profiletrigger/heap"
-	"github.com/raintank/raintank-metric/dur"
+	"github.com/raintank/dur"
 	"github.com/vimeo/statsdaemon"
 	"github.com/vimeo/statsdaemon/timers"
 

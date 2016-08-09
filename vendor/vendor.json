@@ -51,10 +51,10 @@
 			"revisionTime": "2013-05-01T16:47:27Z"
 		},
 		{
-			"checksumSHA1": "4qkgWH+3iya6o1C7vtBIsZvcSro=",
-			"path": "github.com/raintank/raintank-metric/dur",
-			"revision": "e6d8e097a366d2b58e094ab77b1a179def251ab6",
-			"revisionTime": "2016-05-23T18:57:49Z"
+			"checksumSHA1": "6B/7widWpxa60dqiH3Eh9qZGQhY=",
+			"path": "github.com/raintank/dur",
+			"revision": "7b06fb4cf9324a785c2dedea9aa4e47769d54b92",
+			"revisionTime": "2016-07-13T16:23:06Z"
 		},
 		{
 			"checksumSHA1": "+So3vr15OfEgqaq0CJ6BBNLpOb0=",
