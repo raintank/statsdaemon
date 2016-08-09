@@ -1,12 +1,12 @@
+[![Circle CI](https://circleci.com/gh/vimeo/statsdaemon?style=shield)](https://circleci.com/gh/vimeo/statsdaemon)
+[![Go Report Card](https://goreportcard.com/badge/github.com/vimeo/statsdaemon)](https://goreportcard.com/report/github.com/vimeo/statsdaemon)
+[![GoDoc](https://godoc.org/github.com/vimeo/statsdaemon?status.svg)](https://godoc.org/github.com/vimeo/statsdaemon)
+
 statsdaemon
 ==========
 
 Metrics aggregation daemon like [statsd](https://github.com/etsy/statsd), in Go and with a bunch of extra features.
 (Based on code from [Bitly's statsdaemon](https://github.com/bitly/statsdaemon))
-
-[![Build Status](https://secure.travis-ci.org/vimeo/statsdaemon.png)](http://travis-ci.org/vimeo/statsdaemon)
-[![GoDoc](https://godoc.org/github.com/vimeo/statsdaemon?status.png)](https://godoc.org/github.com/vimeo/statsdaemon)
-
 
 Features you expect:
 =======================
