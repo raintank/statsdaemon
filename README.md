@@ -90,6 +90,8 @@ they look a bit unusual but can be treated as regular graphite metrics if you wa
 However using [carbon-tagger](https://github.com/vimeo/carbon-tagger) and [Graph-Explorer](http://vimeo.github.io/graph-explorer/)
 they become much more useful.
 
+There's also a [dashboard for Grafana on Grafana.net](https://grafana.net/dashboards/297)
+
 
 Installing
 ==========
