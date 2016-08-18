@@ -1,0 +1,60 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    archive-tar-minitar (0.5.2)
+    arr-pm (0.0.10)
+      cabin (> 0)
+    backports (3.6.8)
+    cabin (0.8.1)
+    childprocess (0.5.9)
+      ffi (~> 1.0, >= 1.0.11)
+    clamp (1.0.0)
+    ffi (1.9.14)
+    fpm (1.6.2)
+      archive-tar-minitar
+      arr-pm (~> 0.0.10)
+      backports (>= 2.6.2)
+      cabin (>= 0.6.0)
+      childprocess
+      clamp (~> 1.0.0)
+      ffi
+      json (>= 1.7.7, < 2.0)
+      pleaserun (~> 0.0.24)
+      ruby-xz
+    highline (1.6.20)
+    insist (1.0.0)
+    io-like (0.3.0)
+    json (1.8.3)
+    json_pure (1.8.1)
+    mime-types (1.25.1)
+    mustache (0.99.8)
+    package_cloud (0.2.35)
+      highline (= 1.6.20)
+      json_pure (= 1.8.1)
+      rainbow (= 2.1.0)
+      rest-client (~> 1.6.7)
+      thor (~> 0.18)
+    pleaserun (0.0.24)
+      cabin (> 0)
+      clamp
+      insist
+      mustache (= 0.99.8)
+      stud
+    rainbow (2.1.0)
+    rest-client (1.6.9)
+      mime-types (~> 1.16)
+    ruby-xz (0.2.3)
+      ffi (~> 1.9)
+      io-like (~> 0.3)
+    stud (0.0.22)
+    thor (0.19.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  fpm (~> 1.4)
+  package_cloud (~> 0.2)
+
+BUNDLED WITH
+   1.10.4

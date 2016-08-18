@@ -1,0 +1,18 @@
+[Unit]
+Description=Metrics aggregation daemon like statsd, in Go.
+ 
+[Service]
+Type=simple
+User=root
+Group=root
+# Load env vars from /etc/default/ and /etc/sysconfig/ if they exist.
+# Prefixing the path with '-' makes it try to load, but if the file doesn't
+# exist, it continues onward.
+EnvironmentFile=-/etc/default/statsdaemon
+EnvironmentFile=-/etc/sysconfig/statsdaemon
+ExecStart=/usr/sbin/statsdaemon 
+Restart=always
+WorkingDirectory=/
+
+[Install]
+WantedBy=multi-user.target
