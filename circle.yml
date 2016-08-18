@@ -1,7 +1,23 @@
 machine:
   environment:
     GO15VENDOREXPERIMENT: 1
+    GOPATH: "/home/ubuntu/.go_workspace"
+    IMPORTPATH: "/home/ubuntu/.go_workspace/src/github.com/vimeo/statsdaemon"
+test:
+  override:
+    - cd $IMPORTPATH && go test -v -race $(go list ./... | grep -v /vendor/)
+    - cd $IMPORTPATH && go vet $(go list ./... | grep -v /vendor/)
+  post:
+    - scripts/package.sh
 dependencies:
   override:
-    - go version
-    - go build -v
+    - scripts/depends.sh
+    - scripts/build.sh
+general:
+  artifacts:
+    - build
+deployment:
+  production:
+    branch: master
+    commands:
+      - scripts/deploy.sh
