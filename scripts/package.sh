@@ -15,7 +15,7 @@ BUILD=${BUILD_ROOT}/sysvinit
 mkdir -p ${BUILD}/usr/sbin
 mkdir -p ${BUILD}/etc
 
-cp ${BASE}/statsdaemon.ini ${BUILD}/etc/
+cp ${BASE}/../statsdaemon.ini ${BUILD}/etc/
 cp ${BUILD_ROOT}/statsdaemon ${BUILD}/usr/sbin/
 
 PACKAGE_NAME="${BUILD}/statsdaemon-${VERSION}_${ARCH}.deb"
@@ -31,7 +31,7 @@ BUILD=${BUILD_ROOT}/upstart
 mkdir -p ${BUILD}/usr/sbin
 mkdir -p ${BUILD}/etc
 
-cp ${BASE}/statsdaemon.ini ${BUILD}/etc/
+cp ${BASE}/../statsdaemon.ini ${BUILD}/etc/
 cp ${BUILD_ROOT}/statsdaemon ${BUILD}/usr/sbin/
 
 PACKAGE_NAME="${BUILD}/statsdaemon-${VERSION}_${ARCH}.deb"
@@ -48,7 +48,7 @@ mkdir -p ${BUILD}/lib/systemd/system/
 mkdir -p ${BUILD}/etc
 mkdir -p ${BUILD}/var/run/statsdaemon
 
-cp ${BASE}/statsdaemon.ini ${BUILD}/etc/
+cp ${BASE}/../statsdaemon.ini ${BUILD}/etc/
 cp ${BUILD_ROOT}/statsdaemon ${BUILD}/usr/sbin/
 cp ${BASE}/config/systemd/statsdaemon.service $BUILD/lib/systemd/system/
 
@@ -64,7 +64,7 @@ mkdir -p ${BUILD}/lib/systemd/system/
 mkdir -p ${BUILD}/etc
 mkdir -p ${BUILD}/var/run/statsdaemon
 
-cp ${BASE}/statsdaemon.ini ${BUILD}/etc/
+cp ${BASE}/../statsdaemon.ini ${BUILD}/etc/
 cp ${BUILD_ROOT}/statsdaemon ${BUILD}/usr/sbin/
 cp ${BASE}/config/systemd/statsdaemon.service $BUILD/lib/systemd/system/
 
@@ -80,7 +80,7 @@ mkdir -p ${BUILD}/etc/init
 mkdir -p ${BUILD}/usr/sbin
 mkdir -p ${BUILD}/etc
 
-cp ${BASE}/statsdaemon.ini ${BUILD}/etc/
+cp ${BASE}/../statsdaemon.ini ${BUILD}/etc/
 cp ${BUILD_ROOT}/statsdaemon ${BUILD}/usr/sbin/
 cp ${BASE}/config/upstart-0.6.5/statsdaemon.conf $BUILD/etc/init
 
