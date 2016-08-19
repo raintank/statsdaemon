@@ -2,3 +2,4 @@ statsdaemon/statsdaemon
 tester/tester
 *.test
 */*.test
+build/

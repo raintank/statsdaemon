@@ -68,6 +68,7 @@ var (
 	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
 	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
 	memprofile  = flag.String("memprofile", "", "write memory profile to this file")
+	GitHash     = "(none)"
 )
 
 func expand_cfg_vars(in string) (out string) {
@@ -85,7 +86,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
+		fmt.Printf("statsdaemon v%s (built w/%s, git hash %s)\n", VERSION, runtime.Version(), GitHash)
 		return
 	}
 	if *cpuprofile != "" {

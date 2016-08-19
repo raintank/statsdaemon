@@ -100,7 +100,12 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.Clock = clock.New()
 	s.graphiteQueue = make(chan []byte, 1000)
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
-	output := &common.Output{s.Metrics, s.metricAmounts, s.valid_lines, s.Invalid_lines}
+	output := &common.Output{
+		Metrics:       s.Metrics,
+		MetricAmounts: s.metricAmounts,
+		Valid_lines:   s.valid_lines,
+		Invalid_lines: s.Invalid_lines,
+	}
 	go udp.StatsListener(s.listen_addr, s.prefix, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
 	go s.adminListener()                                  // tcp admin_addr to handle requests
 	go s.metricStatsMonitor()                             // handles requests fired by telnet api

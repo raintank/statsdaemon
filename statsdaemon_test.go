@@ -354,10 +354,10 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	counters := make([]*common.Metric, 10)
 	for i := 0; i < 10; i++ {
 		counters[i] = &common.Metric{
-			"test-counter",
-			float64(1),
-			"c",
-			float32(1),
+			Bucket:   "test-counter",
+			Value:    float64(1),
+			Modifier: "c",
+			Sampling: float32(1),
 		}
 	}
 	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)
@@ -375,7 +375,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 		daemon.Clock.(*clock.Mock).Add(10 * time.Second)
 		totalLock.Lock()
 		if total != float64(1000000) {
-			panic(fmt.Sprintf("didn't see 1M counters. only saw %d", total))
+			panic(fmt.Sprintf("didn't see 1M counters. only saw %f", total))
 		}
 		totalLock.Unlock()
 	}
@@ -392,10 +392,10 @@ func BenchmarkIncomingMetricAmounts(b *testing.B) {
 	counters := make([]*common.Metric, 10)
 	for i := 0; i < 10; i++ {
 		counters[i] = &common.Metric{
-			"test-counter",
-			float64(1),
-			"c",
-			float32(1),
+			Bucket:   "test-counter",
+			Value:    float64(1),
+			Modifier: "c",
+			Sampling: float32(1),
 		}
 	}
 	// each operation consists of 100x write (1k * 10 metrics + move clock by 1second)

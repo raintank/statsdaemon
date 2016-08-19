@@ -76,10 +76,10 @@ func ParseMessage(data []byte, prefix_internal string, output *common.Output, pa
 			copy(report_line, line)
 			output.Invalid_lines.Broadcast <- report_line
 			metric = &common.Metric{
-				fmt.Sprintf("%starget_type_is_count.type_is_invalid_line.unit_is_Err", prefix_internal),
-				float64(1),
-				"c",
-				float32(1),
+				Bucket:   fmt.Sprintf("%starget_type_is_count.type_is_invalid_line.unit_is_Err", prefix_internal),
+				Value:    float64(1),
+				Modifier: "c",
+				Sampling: float32(1),
 			}
 		} else {
 			// data will be repurposed by the udpListener
