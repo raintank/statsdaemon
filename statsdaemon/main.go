@@ -35,7 +35,7 @@ const (
 var (
 	listen_addr     = config.String("listen_addr", ":8125")
 	admin_addr      = config.String("admin_addr", ":8126")
-	profile_addr    = config.String("profile_addr", ":6060")
+	profile_addr    = config.String("profile_addr", "")
 	graphite_addr   = config.String("graphite_addr", "127.0.0.1:2003")
 	flushInterval   = config.Int("flush_interval", 10)
 	processes       = config.Int("processes", 1)
