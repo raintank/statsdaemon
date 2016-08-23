@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/vimeo/statsdaemon/udp"
+	"github.com/raintank/statsdaemon/udp"
 	"io"
 	"os"
 )

@@ -1,7 +1,7 @@
 package statsdaemon
 
 import (
-	"github.com/vimeo/statsdaemon/common"
+	"github.com/raintank/statsdaemon/common"
 	"math/rand"
 	"strconv"
 )
@@ -61,7 +61,7 @@ func getDifferentTimers(amount int) []common.Metric {
 		bucket := "timer" + strconv.Itoa(i)
 		val := r.Float64()
 		sampling := r.Float32()
-		common.Metric{Bucket: bucket, Value: val, Modifier: "ms", Sampling: sampling}
+		metrics[i] = common.Metric{Bucket: bucket, Value: val, Modifier: "ms", Sampling: sampling}
 	}
 	return metrics
 }

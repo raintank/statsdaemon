@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	m20 "github.com/metrics20/go-metrics20/carbon20"
-	"github.com/vimeo/statsdaemon/common"
+	"github.com/raintank/statsdaemon/common"
 )
 
 type Float64Slice []float64

@@ -4,7 +4,7 @@ machine:
   environment:
     GO15VENDOREXPERIMENT: 1
     GOPATH: "/home/ubuntu/.go_workspace"
-    IMPORTPATH: "/home/ubuntu/.go_workspace/src/github.com/vimeo/statsdaemon"
+    IMPORTPATH: "/home/ubuntu/.go_workspace/src/github.com/raintank/statsdaemon"
 test:
   override:
     - cd $IMPORTPATH && go test -v -race $(go list ./... | grep -v /vendor/)

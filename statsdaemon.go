@@ -14,12 +14,12 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/tv42/topic"
-	"github.com/vimeo/statsdaemon/common"
-	"github.com/vimeo/statsdaemon/counters"
-	"github.com/vimeo/statsdaemon/gauges"
-	"github.com/vimeo/statsdaemon/ticker"
-	"github.com/vimeo/statsdaemon/timers"
-	"github.com/vimeo/statsdaemon/udp"
+	"github.com/raintank/statsdaemon/common"
+	"github.com/raintank/statsdaemon/counters"
+	"github.com/raintank/statsdaemon/gauges"
+	"github.com/raintank/statsdaemon/ticker"
+	"github.com/raintank/statsdaemon/timers"
+	"github.com/raintank/statsdaemon/udp"
 )
 
 type metricsStatsReq struct {
