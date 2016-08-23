@@ -1,4 +1,6 @@
 machine:
+  services:
+    - docker
   environment:
     GO15VENDOREXPERIMENT: 1
     GOPATH: "/home/ubuntu/.go_workspace"
@@ -13,6 +15,7 @@ dependencies:
   override:
     - scripts/depends.sh
     - scripts/build.sh
+    - scripts/build_docker.sh
 general:
   artifacts:
     - build
@@ -21,3 +24,5 @@ deployment:
     branch: master
     commands:
       - scripts/deploy.sh
+      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+      - scripts/deploy_docker.sh
