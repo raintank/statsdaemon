@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/vimeo/statsdaemon/common"
+	"github.com/raintank/statsdaemon/common"
 	"log"
 	"net"
 	"strconv"

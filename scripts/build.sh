@@ -18,5 +18,5 @@ rm -rf $BUILDDIR/*
 export CGO_ENABLED=0
 
 # Build binary
-cd $GOPATH/src/github.com/vimeo/statsdaemon/statsdaemon
+cd $GOPATH/src/github.com/raintank/statsdaemon/statsdaemon
 go build -ldflags "-X main.GitHash=$GITVERSION" -o $BUILDDIR/statsdaemon

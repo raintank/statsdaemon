@@ -14,8 +14,8 @@ import (
 	"github.com/Dieterbe/profiletrigger/cpu"
 	"github.com/Dieterbe/profiletrigger/heap"
 	"github.com/raintank/dur"
-	"github.com/vimeo/statsdaemon"
-	"github.com/vimeo/statsdaemon/timers"
+	"github.com/raintank/statsdaemon"
+	"github.com/raintank/statsdaemon/timers"
 
 	"net/http"
 	_ "net/http/pprof"

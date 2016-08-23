@@ -2,7 +2,7 @@ package udp
 
 import (
 	"errors"
-	"github.com/vimeo/statsdaemon/common"
+	"github.com/raintank/statsdaemon/common"
 	"reflect"
 	"testing"
 )

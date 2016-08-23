@@ -1,7 +1,7 @@
 package statsdaemon
 
 import (
-	"github.com/vimeo/statsdaemon/common"
+	"github.com/raintank/statsdaemon/common"
 	"math/rand"
 	"strconv"
 )
