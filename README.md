@@ -147,6 +147,15 @@ prefix_gauges = "stats.gauges."
 #prefix_timers = "stats.timers."
 #prefix_gauges = "stats.gauges."
 
+# prefixes for metrics2.0 metrics
+# using this you can add tags, like "foo=bar.baz=quux."
+# note that you should use '=' here.
+# If your metrics use the '_is_' style, then we'll automatically apply the converted prefix instead.
+prefix_m20_rates = ""
+prefix_m20_counters = ""
+prefix_m20_timers = ""
+prefix_m20_gauges = ""
+
 # send rates for counters (using prefix_rates)
 flush_rates = true
 # send count for counters (using prefix_counters)

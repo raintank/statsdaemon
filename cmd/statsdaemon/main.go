@@ -40,10 +40,15 @@ var (
 	flushInterval   = config.Int("flush_interval", 10)
 	processes       = config.Int("processes", 1)
 	instance        = config.String("instance", "null")
-	prefix_rates    = config.String("prefix_rates", "stats.")
 	prefix_counters = config.String("prefix_counters", "stats_counts.")
-	prefix_timers   = config.String("prefix_timers", "stats.timers.")
 	prefix_gauges   = config.String("prefix_gauges", "stats.gauges.")
+	prefix_rates    = config.String("prefix_rates", "stats.")
+	prefix_timers   = config.String("prefix_timers", "stats.timers.")
+
+	prefix_m20_counters = config.String("prefix_m20_counters", "")
+	prefix_m20_gauges   = config.String("prefix_m20_gauges", "")
+	prefix_m20_rates    = config.String("prefix_m20_rates", "")
+	prefix_m20_timers   = config.String("prefix_m20_timers", "")
 
 	legacy_namespace = config.Bool("legacy_namespace", true)
 	flush_rates      = config.Bool("flush_rates", true)
@@ -162,7 +167,26 @@ func main() {
 		}()
 	}
 
-	daemon := statsdaemon.New(inst, *prefix_rates, *prefix_timers, *prefix_gauges, *prefix_counters, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan, *debug, *legacy_namespace, *flush_rates, *flush_counts)
+	formatter := statsdaemon.Formatter{
+		Prefix:           "service_is_statsdaemon.instance_is_" + inst + ".",
+		Legacy_namespace: *legacy_namespace,
+		Prefix_counters:  *prefix_counters,
+		Prefix_gauges:    *prefix_gauges,
+		Prefix_rates:     *prefix_rates,
+		Prefix_timers:    *prefix_timers,
+
+		Prefix_m20_counters: *prefix_m20_counters,
+		Prefix_m20_gauges:   *prefix_m20_gauges,
+		Prefix_m20_rates:    *prefix_m20_rates,
+		Prefix_m20_timers:   *prefix_m20_timers,
+
+		Prefix_m20ne_counters: strings.Replace(*prefix_m20_counters, "=", "_is_", -1),
+		Prefix_m20ne_gauges:   strings.Replace(*prefix_m20_gauges, "=", "_is_", -1),
+		Prefix_m20ne_rates:    strings.Replace(*prefix_m20_rates, "=", "_is_", -1),
+		Prefix_m20ne_timers:   strings.Replace(*prefix_m20_timers, "=", "_is_", -1),
+	}
+
+	daemon := statsdaemon.New(inst, formatter, *flush_rates, *flush_counts, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, *debug, signalchan)
 	if *debug {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)
