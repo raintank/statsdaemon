@@ -97,7 +97,7 @@ Installing
 ==========
 
 ```bash
-go get github.com/Vimeo/statsdaemon/statsdaemon
+go get github.com/raintank/statsdaemon/cmd/statsdaemon
 ```
 
 
