@@ -14,10 +14,8 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/raintank/statsdaemon/common"
-	"github.com/raintank/statsdaemon/counters"
-	"github.com/raintank/statsdaemon/gauges"
+	"github.com/raintank/statsdaemon/out"
 	"github.com/raintank/statsdaemon/ticker"
-	"github.com/raintank/statsdaemon/timers"
 	"github.com/raintank/statsdaemon/udp"
 	"github.com/tv42/topic"
 )
@@ -27,39 +25,14 @@ type metricsStatsReq struct {
 	Conn    *net.Conn
 }
 
-type SubmitFunc func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time)
-
-type Formatter struct {
-	// prefix of statsdaemon's own metrics2.0 stats
-	Prefix string
-
-	// formatting of old style metrics
-	Legacy_namespace bool
-	Prefix_counters  string
-	Prefix_gauges    string
-	Prefix_rates     string
-	Prefix_timers    string
-
-	// formatting of metrics2.0
-	Prefix_m20_counters string
-	Prefix_m20_gauges   string
-	Prefix_m20_rates    string
-	Prefix_m20_timers   string
-
-	// metrics2.0 using _is_ convention instead of =
-	Prefix_m20ne_counters string
-	Prefix_m20ne_gauges   string
-	Prefix_m20ne_rates    string
-	Prefix_m20ne_timers   string
-}
-
+type SubmitFunc func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time)
 type StatsDaemon struct {
 	instance string
 
-	fmt              Formatter
+	fmt              out.Formatter
 	flush_rates      bool
 	flush_counts     bool
-	pct              timers.Percentiles
+	pct              out.Percentiles
 	flushInterval    int
 	max_unprocessed  int
 	max_timers_per_s uint64
@@ -82,7 +55,7 @@ type StatsDaemon struct {
 	graphite_addr string
 }
 
-func New(instance string, formatter Formatter, flush_rates, flush_counts bool, pct timers.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, debug bool, signalchan chan os.Signal) *StatsDaemon {
+func New(instance string, formatter out.Formatter, flush_rates, flush_counts bool, pct out.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, debug bool, signalchan chan os.Signal) *StatsDaemon {
 	return &StatsDaemon{
 		instance:            instance,
 		fmt:                 formatter,
@@ -114,17 +87,17 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.graphite_addr = graphite_addr
 
 	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
-	output := &common.Output{
+	output := &out.Output{
 		Metrics:       s.Metrics,
 		MetricAmounts: s.metricAmounts,
 		Valid_lines:   s.valid_lines,
 		Invalid_lines: s.Invalid_lines,
 	}
-	go udp.StatsListener(s.listen_addr, s.fmt.Prefix, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
-	go s.adminListener()                                      // tcp admin_addr to handle requests
-	go s.metricStatsMonitor()                                 // handles requests fired by telnet api
-	go s.graphiteWriter()                                     // writes to graphite in the background
-	s.metricsMonitor()                                        // takes data from s.Metrics and puts them in the guage/timers/etc objects. pointers guarded by select. also listens for signals.
+	go udp.StatsListener(s.listen_addr, s.fmt.PrefixInternal, output) // set up udp listener that writes messages to output's channels (i.e. s's channels)
+	go s.adminListener()                                              // tcp admin_addr to handle requests
+	go s.metricStatsMonitor()                                         // handles requests fired by telnet api
+	go s.graphiteWriter()                                             // writes to graphite in the background
+	s.metricsMonitor()                                                // takes data from s.Metrics and puts them in the guage/timers/etc objects. pointers guarded by select. also listens for signals.
 }
 
 // start statsdaemon instance, only processing incoming metrics from the channel, and flushing
@@ -144,32 +117,32 @@ func (s *StatsDaemon) metricsMonitor() {
 	period := time.Duration(s.flushInterval) * time.Second
 	tick := ticker.GetAlignedTicker(s.Clock, period)
 
-	var c *counters.Counters
-	var g *gauges.Gauges
-	var t *timers.Timers
+	var c *out.Counters
+	var g *out.Gauges
+	var t *out.Timers
 	oneCounter := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", s.fmt.Prefix),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
 	oneGauge := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", s.fmt.Prefix),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
 	oneTimer := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", s.fmt.Prefix),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
 
 	initializeCounters := func() {
-		c = counters.New(s.fmt.Prefix_rates, s.fmt.Prefix_counters, s.fmt.Legacy_namespace, s.flush_rates, s.flush_counts)
-		g = gauges.New(s.fmt.Prefix_gauges)
-		t = timers.New(s.fmt.Prefix_timers, s.pct)
+		c = out.NewCounters(s.flush_rates, s.flush_counts)
+		g = out.NewGauges()
+		t = out.NewTimers(s.pct)
 		for _, name := range []string{"timer", "gauge", "counter"} {
 			c.Add(&common.Metric{
-				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.fmt.Prefix, name),
+				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal, name),
 				Sampling: 1,
 			})
 		}
@@ -187,7 +160,7 @@ func (s *StatsDaemon) metricsMonitor() {
 				fmt.Printf("unknown signal %s, ignoring\n", sig)
 			}
 		case <-tick.C:
-			go func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers) {
+			go func(c *out.Counters, g *out.Gauges, t *out.Timers) {
 				s.submitFunc(c, g, t, s.Clock.Now().Add(period))
 				s.events.Broadcast <- "flush"
 			}(c, g, t)
@@ -210,20 +183,15 @@ func (s *StatsDaemon) metricsMonitor() {
 	}
 }
 
-type statsdType interface {
-	Add(metric *common.Metric)
-	Process(buf []byte, now int64, interval int) ([]byte, int64)
-}
-
 // instrument wraps around a processing function, and makes sure we track the number of metrics and duration of the call,
 // which it flushes as metrics2.0 metrics to the outgoing buffer.
-func (s *StatsDaemon) instrument(st statsdType, buf []byte, now int64, name string) ([]byte, int64) {
+func (s *StatsDaemon) instrument(st out.Type, buf []byte, now int64, name string) ([]byte, int64) {
 	time_start := s.Clock.Now()
-	buf, num := st.Process(buf, now, s.flushInterval)
+	buf, num := st.Process(buf, now, s.flushInterval, s.fmt)
 	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms", s.fmt.Prefix, name)), duration_ms, now)
-	buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps", s.fmt.Prefix, name)), float64(num)/float64(s.flushInterval), now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms", s.fmt.PrefixInternal, name)), duration_ms, now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps", s.fmt.PrefixInternal, name)), float64(num)/float64(s.flushInterval), now)
 	return buf, num
 }
 
@@ -294,7 +262,7 @@ func (s *StatsDaemon) graphiteWriter() {
 			}
 		}
 		buf = buf[:0]
-		buf = common.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.fmt.Prefix)), duration, pre.Unix())
+		buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.fmt.PrefixInternal)), duration, pre.Unix())
 		ok = false
 		for !ok {
 			lock.Lock()
@@ -327,7 +295,7 @@ func (s *StatsDaemon) graphiteWriter() {
 }
 
 // GraphiteQuepue invokes the processing function (instrumented) and enqueues data for writing to graphite
-func (s *StatsDaemon) GraphiteQueue(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
+func (s *StatsDaemon) GraphiteQueue(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 	buf := make([]byte, 0)
 
 	now := s.Clock.Now().Unix()

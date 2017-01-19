@@ -1,4 +1,4 @@
-package timers
+package out
 
 import (
 	"fmt"

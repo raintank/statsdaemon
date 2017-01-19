@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/raintank/statsdaemon/common"
+	"github.com/raintank/statsdaemon/out"
 	"log"
 	"net"
 	"strconv"
@@ -67,7 +68,7 @@ func ParseLine(line []byte) (metric *common.Metric, err error) {
 // ParseMessage turns byte data into a slice of metric pointers
 // note that it creates "invalid line" metrics itself, upon invalid lines,
 // which will get passed on and aggregated along with the other metrics
-func ParseMessage(data []byte, prefix_internal string, output *common.Output, parse parseLineFunc) (metrics []*common.Metric) {
+func ParseMessage(data []byte, prefix_internal string, output *out.Output, parse parseLineFunc) (metrics []*common.Metric) {
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		metric, err := parse(line)
 		if err != nil {
@@ -96,13 +97,13 @@ func ParseMessage(data []byte, prefix_internal string, output *common.Output, pa
 
 type parseLineFunc func(line []byte) (metric *common.Metric, err error)
 
-func StatsListener(listen_addr, prefix_internal string, output *common.Output) {
+func StatsListener(listen_addr, prefix_internal string, output *out.Output) {
 	Listener(listen_addr, prefix_internal, output, ParseLine2)
 }
 
 // Listener receives packets from the udp buffer, parses them and feeds both the Metrics channel
 // as well as the metricAmounts channel
-func Listener(listen_addr, prefix_internal string, output *common.Output, parse parseLineFunc) {
+func Listener(listen_addr, prefix_internal string, output *out.Output, parse parseLineFunc) {
 	address, err := net.ResolveUDPAddr("udp", listen_addr)
 	if err != nil {
 		log.Fatalf("ERROR: Cannot resolve '%s' - %s", listen_addr, err)

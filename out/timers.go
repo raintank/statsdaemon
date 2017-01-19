@@ -1,4 +1,4 @@
-package timers
+package out
 
 import (
 	"fmt"
@@ -12,14 +12,12 @@ import (
 type Float64Slice []float64
 
 type Timers struct {
-	prefix string
 	pctls  Percentiles
 	Values map[string]Data
 }
 
-func New(prefix string, pctls Percentiles) *Timers {
+func NewTimers(pctls Percentiles) *Timers {
 	return &Timers{
-		prefix,
 		pctls,
 		make(map[string]Data),
 	}
@@ -35,7 +33,7 @@ func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 func (t *Timers) String() string {
-	return fmt.Sprintf("<*Timers %p prefix '%s', percentiles '%s', %d values>", t, t.prefix, t.pctls, len(t.Values))
+	return fmt.Sprintf("<*Timers %p, percentiles '%s', %d values>", t, t.pctls, len(t.Values))
 }
 
 // Add updates the timers map, adding the metric key if needed
@@ -51,7 +49,7 @@ func (timers *Timers) Add(metric *common.Metric) {
 }
 
 // Process computes the outbound metrics for timers and puts them in the buffer
-func (timers *Timers) Process(buf []byte, now int64, interval int) ([]byte, int64) {
+func (timers *Timers) Process(buf []byte, now int64, interval int, f Formatter) ([]byte, int64) {
 	// these are the metrics that get exposed:
 	// count estimate of original amount of metrics sent, by dividing received by samplerate
 	// count_ps  same but per second
@@ -128,7 +126,7 @@ func (timers *Timers) Process(buf []byte, now int64, interval int) ([]byte, int6
 				}
 
 				var pctstr string
-				var fn func(metric_in, prefix, percentile, timespec string) string
+				var fn func(metric_in, p1, p2, p2ne, percentile, timespec string) string
 				if pct.float >= 0 {
 					pctstr = pct.str
 					fn = m20.Max
@@ -136,19 +134,19 @@ func (timers *Timers) Process(buf []byte, now int64, interval int) ([]byte, int6
 					pctstr = pct.str[1:]
 					fn = m20.Min
 				}
-				buf = common.WriteFloat64(buf, []byte(fn(u, timers.prefix, pctstr, "")), maxAtThreshold, now)
-				buf = common.WriteFloat64(buf, []byte(m20.Mean(u, timers.prefix, pctstr, "")), mean_pct, now)
-				buf = common.WriteFloat64(buf, []byte(m20.Sum(u, timers.prefix, pctstr, "")), sum_pct, now)
+				buf = WriteFloat64(buf, []byte(fn(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, pctstr, "")), maxAtThreshold, now)
+				buf = WriteFloat64(buf, []byte(m20.Mean(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, pctstr, "")), mean_pct, now)
+				buf = WriteFloat64(buf, []byte(m20.Sum(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, pctstr, "")), sum_pct, now)
 			}
 
-			buf = common.WriteFloat64(buf, []byte(m20.Mean(u, timers.prefix, "", "")), mean, now)
-			buf = common.WriteFloat64(buf, []byte(m20.Median(u, timers.prefix, "", "")), median, now)
-			buf = common.WriteFloat64(buf, []byte(m20.Std(u, timers.prefix, "", "")), stddev, now)
-			buf = common.WriteFloat64(buf, []byte(m20.Sum(u, timers.prefix, "", "")), sum, now)
-			buf = common.WriteFloat64(buf, []byte(m20.Max(u, timers.prefix, "", "")), max, now)
-			buf = common.WriteFloat64(buf, []byte(m20.Min(u, timers.prefix, "", "")), min, now)
-			buf = common.WriteInt64(buf, []byte(m20.CountPckt(u, timers.prefix)), count, now)
-			buf = common.WriteFloat64(buf, []byte(m20.RatePckt(u, timers.prefix)), count_ps, now)
+			buf = WriteFloat64(buf, []byte(m20.Mean(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), mean, now)
+			buf = WriteFloat64(buf, []byte(m20.Median(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), median, now)
+			buf = WriteFloat64(buf, []byte(m20.Std(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), stddev, now)
+			buf = WriteFloat64(buf, []byte(m20.Sum(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), sum, now)
+			buf = WriteFloat64(buf, []byte(m20.Max(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), max, now)
+			buf = WriteFloat64(buf, []byte(m20.Min(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers, "", "")), min, now)
+			buf = WriteInt64(buf, []byte(m20.CountPckt(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers)), count, now)
+			buf = WriteFloat64(buf, []byte(m20.RatePckt(u, f.Prefix_timers, f.Prefix_m20_timers, f.Prefix_m20ne_timers)), count_ps, now)
 		}
 	}
 	return buf, num

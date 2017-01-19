@@ -15,7 +15,7 @@ import (
 	"github.com/Dieterbe/profiletrigger/heap"
 	"github.com/raintank/dur"
 	"github.com/raintank/statsdaemon"
-	"github.com/raintank/statsdaemon/timers"
+	"github.com/raintank/statsdaemon/out"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -149,7 +149,7 @@ func main() {
 	}
 
 	runtime.GOMAXPROCS(*processes)
-	pct, err := timers.NewPercentiles(*percentile_thresholds)
+	pct, err := out.NewPercentiles(*percentile_thresholds)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,8 +167,9 @@ func main() {
 		}()
 	}
 
-	formatter := statsdaemon.Formatter{
-		Prefix:           "service_is_statsdaemon.instance_is_" + inst + ".",
+	formatter := out.Formatter{
+		PrefixInternal: "service_is_statsdaemon.instance_is_" + inst + ".",
+
 		Legacy_namespace: *legacy_namespace,
 		Prefix_counters:  *prefix_counters,
 		Prefix_gauges:    *prefix_gauges,

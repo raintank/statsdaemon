@@ -10,18 +10,47 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/bmizerany/assert"
 	"github.com/raintank/statsdaemon/common"
-	"github.com/raintank/statsdaemon/counters"
-	"github.com/raintank/statsdaemon/gauges"
-	"github.com/raintank/statsdaemon/timers"
+	"github.com/raintank/statsdaemon/out"
 	"github.com/raintank/statsdaemon/udp"
 )
 
-var output = common.NullOutput()
-var prefix_internal = ""
+var output = out.NullOutput()
+
+var formatM1Legacy = out.Formatter{
+	PrefixInternal:   "internal.",
+	Legacy_namespace: true,
+	Prefix_rates:     "stats.",
+	Prefix_counters:  "stats_counts.",
+	Prefix_timers:    "stats.timers.",
+	Prefix_gauges:    "stats.gauges.",
+}
+
+var formatM1Recommended = out.Formatter{
+	PrefixInternal:   "internal.",
+	Legacy_namespace: false,
+	Prefix_rates:     "stats.counters.",
+	Prefix_counters:  "stats.counters.",
+	Prefix_timers:    "stats.timers.",
+	Prefix_gauges:    "stats.gauges.",
+}
+
+var formatM20 = out.Formatter{
+	Prefix_m20_counters: "counters-2.",
+	Prefix_m20_gauges:   "gauges-2.",
+	Prefix_m20_rates:    "rates-2.",
+	Prefix_m20_timers:   "timers-2.",
+}
+
+var formatM20NE = out.Formatter{
+	Prefix_m20ne_counters: "counters-2NE.",
+	Prefix_m20ne_gauges:   "gauges-2NE.",
+	Prefix_m20ne_rates:    "rates-2NE.",
+	Prefix_m20ne_timers:   "timers-2NE.",
+}
 
 func TestPacketParse(t *testing.T) {
 	d := []byte("gaugor:333|g")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets := udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet := packets[0]
 	assert.Equal(t, "gaugor", packet.Bucket)
@@ -30,7 +59,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gorets:2|c|@0.1")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -39,7 +68,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(0.1), packet.Sampling)
 
 	d = []byte("gorets:4|c")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -48,7 +77,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gorets:-4|c")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
@@ -57,7 +86,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("glork:320|ms")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "glork", packet.Bucket)
@@ -66,7 +95,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with-0.dash:4|c")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	packet = packets[0]
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
@@ -75,7 +104,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 2)
 	packet = packets[0]
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
@@ -89,72 +118,120 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
-	errors_key := "target_type_is_count.type_is_invalid_line.unit_is_Err"
+	errors_key := "internal.target_type_is_count.type_is_invalid_line.unit_is_Err"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 2)
 	assert.Equal(t, packets[0].Bucket, errors_key)
 	assert.Equal(t, packets[1].Bucket, errors_key)
 
 	d = []byte("a.key.with-0.dash:4")
-	packets = udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 1)
 	assert.Equal(t, packets[0].Bucket, errors_key)
 }
 
-func TestMean(t *testing.T) {
-	// Some data with expected mean of 20
-	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
-
-	ti := timers.New("", timers.Percentiles{})
-
+func processTimer(ti *out.Timers, input string, f out.Formatter) (string, int64) {
+	packets := udp.ParseMessage([]byte(input), "", output, udp.ParseLine)
 	for _, p := range packets {
 		ti.Add(p)
 	}
-	var buf []byte
-	buf, num := ti.Process(buf, time.Now().Unix(), 60)
+	buf, num := ti.Process(nil, time.Now().Unix(), 60, f)
+	return string(buf), num
+}
+
+func processCounter(cnt *out.Counters, input string, f out.Formatter) (string, int64) {
+	packets := udp.ParseMessage([]byte(input), "", output, udp.ParseLine)
+	for _, p := range packets {
+		cnt.Add(p)
+	}
+
+	buf, num := cnt.Process(nil, 1, 10, f)
+	return string(buf), num
+}
+
+func TestTimerM1(t *testing.T) {
+	got, num := processTimer(out.NewTimers(out.Percentiles{}), "response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms", formatM1Legacy)
 	assert.Equal(t, num, int64(1))
-	exp := "response_time.mean 20 "
-	got := string(buf)
+	exp := "stats.timers.response_time.mean 20 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "stats.timers.response_time.sum 60 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "stats.timers.response_time.lower 0 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "stats.timers.response_time.upper 30 "
 	if !strings.Contains(got, exp) {
 		t.Fatalf("output %q does not contain %q", got, exp)
 	}
 }
 
-func getGraphiteSendForCounter(cnt *counters.Counters, input string) (string, int64) {
-	// Some data with expected sum of 6
-	d := []byte(input)
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
-
-	for _, p := range packets {
-		cnt.Add(p)
+func TestTimerM20(t *testing.T) {
+	got, num := processTimer(out.NewTimers(out.Percentiles{}), "direction=out.unit=ms.mtype=gauge:0|ms\ndirection=out.unit=ms.mtype=gauge:30|ms\ndirection=out.unit=ms.mtype=gauge:30|ms", formatM20)
+	assert.Equal(t, num, int64(1))
+	exp := "timers-2.direction=out.unit=ms.mtype=gauge.stat=mean 20 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
 	}
-
-	var buf []byte
-	buf, num := cnt.Process(buf, 1, 10)
-	return string(buf), num
+	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=sum 60 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=min 0 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=max 30 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
 }
 
-func TestCountersLegacyNamespaceFalse(t *testing.T) {
-	cnt := counters.New("rates.", "counters.", false, true, true)
-	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
+func TestTimerM20NE(t *testing.T) {
+	got, num := processTimer(out.NewTimers(out.Percentiles{}), "direction_is_out.unit_is_ms.mtype_is_gauge:0|ms\ndirection_is_out.unit_is_ms.mtype_is_gauge:30|ms\ndirection_is_out.unit_is_ms.mtype_is_gauge:30|ms", formatM20NE)
+	assert.Equal(t, num, int64(1))
+	exp := "timers-2NE.direction_is_out.unit_is_ms.mtype_is_gauge.stat_is_mean 20 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "timers-2NE.direction_is_out.unit_is_ms.mtype_is_gauge.stat_is_sum 60 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "timers-2NE.direction_is_out.unit_is_ms.mtype_is_gauge.stat_is_min 0 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+	exp = "timers-2NE.direction_is_out.unit_is_ms.mtype_is_gauge.stat_is_max 30 "
+	if !strings.Contains(got, exp) {
+		t.Fatalf("output %q does not contain %q", got, exp)
+	}
+}
+
+func TestCountersM1Recommended(t *testing.T) {
+	cnt := out.NewCounters(true, true)
+	dataForGraphite, num := processCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c", formatM1Recommended)
 
 	assert.Equal(t, num, int64(1))
-	assert.Equal(t, "counters.logins.count 6 1\nrates.logins.rate 0.6 1\n", dataForGraphite)
+	assert.Equal(t, "stats.counters.logins.count 6 1\nstats.counters.logins.rate 0.6 1\n", dataForGraphite)
 }
 
-func TestCountersLegacyNamespaceTrue(t *testing.T) {
-	cnt := counters.New("stats.", "stats_counts.", true, true, true)
-	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
+func TestCountersM1Legacy(t *testing.T) {
+	cnt := out.NewCounters(true, true)
+	dataForGraphite, num := processCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c", formatM1Legacy)
 
 	assert.Equal(t, num, int64(1))
 	assert.Equal(t, "stats_counts.logins 6 1\nstats.logins 0.6 1\n", dataForGraphite)
 }
 
-func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
-	cnt := counters.New("stats.", "stats_counts.", true, true, false)
-	dataForGraphite, num := getGraphiteSendForCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c")
+func TestCountersM1LegacyFlushCountsFalse(t *testing.T) {
+	cnt := out.NewCounters(true, false)
+	dataForGraphite, num := processCounter(cnt, "logins:1|c\nlogins:2|c\nlogins:3|c", formatM1Legacy)
 
 	assert.Equal(t, num, int64(1))
 	assert.Equal(t, "stats.logins 0.6 1\n", dataForGraphite)
@@ -162,17 +239,17 @@ func TestCountersLegacyNamespaceTrueFlushCountsFalse(t *testing.T) {
 
 func TestUpperPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
-	pct, _ := timers.NewPercentiles("75")
-	ti := timers.New("", *pct)
+	pct, _ := out.NewPercentiles("75")
+	ti := out.NewTimers(*pct)
 
 	for _, p := range packets {
 		ti.Add(p)
 	}
 
 	var buf []byte
-	buf, num := ti.Process(buf, time.Now().Unix(), 60)
+	buf, num := ti.Process(buf, time.Now().Unix(), 60, formatM1Legacy)
 	assert.Equal(t, num, int64(1))
 
 	exp := "time.upper_75 2 "
@@ -184,17 +261,17 @@ func TestUpperPercentile(t *testing.T) {
 
 func TestMetrics20Timer(t *testing.T) {
 	d := []byte("foo=bar.target_type=gauge.unit=ms:5|ms\nfoo=bar.target_type=gauge.unit=ms:10|ms")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
-	pct, _ := timers.NewPercentiles("75")
-	ti := timers.New("", *pct)
+	pct, _ := out.NewPercentiles("75")
+	ti := out.NewTimers(*pct)
 
 	for _, p := range packets {
 		ti.Add(p)
 	}
 
 	var buf []byte
-	buf, num := ti.Process(buf, time.Now().Unix(), 10)
+	buf, num := ti.Process(buf, time.Now().Unix(), 10, formatM1Legacy)
 	assert.Equal(t, int(num), 1)
 
 	dataForGraphite := string(buf)
@@ -210,18 +287,19 @@ func TestMetrics20Timer(t *testing.T) {
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
 	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.2"))
 }
+
 func TestMetrics20Count(t *testing.T) {
 	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
-	c := counters.New("", "", true, true, false)
+	c := out.NewCounters(true, false)
 	for _, p := range packets {
 		c.Add(p)
 	}
 
 	var buf []byte
 	var num int64
-	buf, n := c.Process(buf, time.Now().Unix(), 10)
+	buf, n := c.Process(buf, time.Now().Unix(), 10, formatM20)
 	num += n
 
 	assert.T(t, strings.Contains(string(buf), "foo=bar.target_type=rate.unit=Bps 1.5"))
@@ -229,10 +307,10 @@ func TestMetrics20Count(t *testing.T) {
 
 func TestLowerPercentile(t *testing.T) {
 	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := udp.ParseMessage(d, prefix_internal, output, udp.ParseLine)
+	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
-	pct, _ := timers.NewPercentiles("-75")
-	ti := timers.New("", *pct)
+	pct, _ := out.NewPercentiles("-75")
+	ti := out.NewTimers(*pct)
 
 	for _, p := range packets {
 		ti.Add(p)
@@ -240,7 +318,7 @@ func TestLowerPercentile(t *testing.T) {
 
 	var buf []byte
 	var num int64
-	buf, n := ti.Process(buf, time.Now().Unix(), 10)
+	buf, n := ti.Process(buf, time.Now().Unix(), 10, formatM1Legacy)
 	num += n
 
 	assert.Equal(t, num, int64(1))
@@ -257,94 +335,94 @@ func TestLowerPercentile(t *testing.T) {
 	}
 }
 
-func BenchmarkDifferentCountersAddAndProcessNonLegacy(b *testing.B) {
+func BenchmarkDifferentCountersAddAndProcessM1Recommended(b *testing.B) {
 	metrics := getDifferentCounters(b.N)
 	b.ResetTimer()
-	c := counters.New("bar", "", true, true, false)
+	c := out.NewCounters(true, false)
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(make([]byte, 0), time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Recommended)
 }
 
-func BenchmarkDifferentCountersAddAndProcessLegacy(b *testing.B) {
+func BenchmarkDifferentCountersAddAndProcessM1Legacy(b *testing.B) {
 	metrics := getDifferentCounters(b.N)
 	b.ResetTimer()
-	c := counters.New("bar", "", true, true, true)
+	c := out.NewCounters(true, true)
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(make([]byte, 0), time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
-func BenchmarkSameCountersAddAndProcessNonLegacy(b *testing.B) {
+func BenchmarkSameCountersAddAndProcessM1Recommended(b *testing.B) {
 	metrics := getSameCounters(b.N)
 	b.ResetTimer()
-	c := counters.New("bar", "", true, true, false)
+	c := out.NewCounters(true, false)
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(make([]byte, 0), time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Recommended)
 }
 
-func BenchmarkSameCountersAddAndProcessLegacy(b *testing.B) {
+func BenchmarkSameCountersAddAndProcessM1Legacy(b *testing.B) {
 	metrics := getSameCounters(b.N)
 	b.ResetTimer()
-	c := counters.New("bar", "", true, true, true)
+	c := out.NewCounters(true, true)
 	for i := 0; i < len(metrics); i++ {
 		c.Add(&metrics[i])
 	}
-	c.Process(make([]byte, 0), time.Now().Unix(), 10)
+	c.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
 func BenchmarkDifferentGaugesAddAndProcess(b *testing.B) {
 	metrics := getDifferentGauges(b.N)
 	b.ResetTimer()
-	g := gauges.New("bar")
+	g := out.NewGauges()
 	for i := 0; i < len(metrics); i++ {
 		g.Add(&metrics[i])
 	}
-	g.Process(make([]byte, 0), time.Now().Unix(), 10)
+	g.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
 func BenchmarkSameGaugesAddAndProcess(b *testing.B) {
 	metrics := getSameGauges(b.N)
 	b.ResetTimer()
-	g := gauges.New("bar")
+	g := out.NewGauges()
 	for i := 0; i < len(metrics); i++ {
 		g.Add(&metrics[i])
 	}
-	g.Process(make([]byte, 0), time.Now().Unix(), 10)
+	g.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
 func BenchmarkDifferentTimersAddAndProcess(b *testing.B) {
 	metrics := getDifferentTimers(b.N)
 	b.ResetTimer()
-	pct, _ := timers.NewPercentiles("99")
-	t := timers.New("bar", *pct)
+	pct, _ := out.NewPercentiles("99")
+	t := out.NewTimers(*pct)
 	for i := 0; i < len(metrics); i++ {
 		t.Add(&metrics[i])
 	}
-	t.Process(make([]byte, 0), time.Now().Unix(), 10)
+	t.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
 func BenchmarkSameTimersAddAndProcess(b *testing.B) {
 	metrics := getSameTimers(b.N)
 	b.ResetTimer()
-	pct, _ := timers.NewPercentiles("99")
-	t := timers.New("bar", *pct)
+	pct, _ := out.NewPercentiles("99")
+	t := out.NewTimers(*pct)
 	for i := 0; i < len(metrics); i++ {
 		t.Add(&metrics[i])
 	}
-	t.Process(make([]byte, 0), time.Now().Unix(), 10)
+	t.Process(make([]byte, 0), time.Now().Unix(), 10, formatM1Legacy)
 }
 
 func BenchmarkIncomingMetrics(b *testing.B) {
-	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true, true, false)
+	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, false, nil)
 	daemon.Clock = clock.NewMock()
 	total := float64(0)
 	totalLock := sync.Mutex{}
-	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
+	daemon.submitFunc = func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 		totalLock.Lock()
 		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
 		totalLock.Unlock()
@@ -383,9 +461,9 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 }
 
 func BenchmarkIncomingMetricAmounts(b *testing.B) {
-	daemon := New("test", "rates.", "timers.", "gauges.", "counters.", timers.Percentiles{}, 10, 1000, 1000, nil, false, true, true, false)
+	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, false, nil)
 	daemon.Clock = clock.NewMock()
-	daemon.submitFunc = func(c *counters.Counters, g *gauges.Gauges, t *timers.Timers, deadline time.Time) {
+	daemon.submitFunc = func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 	}
 	go daemon.RunBare()
 	b.ResetTimer()

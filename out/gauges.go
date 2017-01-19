@@ -1,4 +1,4 @@
-package gauges
+package out
 
 import (
 	m20 "github.com/metrics20/go-metrics20/carbon20"
@@ -6,13 +6,11 @@ import (
 )
 
 type Gauges struct {
-	prefix string
 	Values map[string]float64
 }
 
-func New(prefix string) *Gauges {
+func NewGauges() *Gauges {
 	return &Gauges{
-		prefix,
 		make(map[string]float64),
 	}
 }
@@ -23,10 +21,11 @@ func (g *Gauges) Add(metric *common.Metric) {
 }
 
 // Process puts gauges in the outbound buffer
-func (g *Gauges) Process(buf []byte, now int64, interval int) ([]byte, int64) {
+func (g *Gauges) Process(buf []byte, now int64, interval int, f Formatter) ([]byte, int64) {
 	var num int64
 	for key, val := range g.Values {
-		buf = common.WriteFloat64(buf, []byte(m20.Gauge(key, g.prefix)), val, now)
+		key = m20.Gauge(key, f.Prefix_gauges, f.Prefix_m20_gauges, f.Prefix_m20ne_gauges)
+		buf = WriteFloat64(buf, []byte(key), val, now)
 		num++
 	}
 	return buf, num
