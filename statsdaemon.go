@@ -121,17 +121,17 @@ func (s *StatsDaemon) metricsMonitor() {
 	var g *out.Gauges
 	var t *out.Timers
 	oneCounter := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_counter.mtype_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
 	oneGauge := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_gauge.mtype_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
 	oneTimer := &common.Metric{
-		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal),
+		Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_timer.mtype_is_count.unit_is_Metric", s.fmt.PrefixInternal),
 		Value:    1,
 		Sampling: 1,
 	}
@@ -142,7 +142,7 @@ func (s *StatsDaemon) metricsMonitor() {
 		t = out.NewTimers(s.pct)
 		for _, name := range []string{"timer", "gauge", "counter"} {
 			c.Add(&common.Metric{
-				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.target_type_is_count.unit_is_Metric", s.fmt.PrefixInternal, name),
+				Bucket:   fmt.Sprintf("%sdirection_is_in.statsd_type_is_%s.mtype_is_count.unit_is_Metric", s.fmt.PrefixInternal, name),
 				Sampling: 1,
 			})
 		}
@@ -190,8 +190,8 @@ func (s *StatsDaemon) instrument(st out.Type, buf []byte, now int64, name string
 	buf, num := st.Process(buf, now, s.flushInterval, s.fmt)
 	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.target_type_is_gauge.type_is_calculation.unit_is_ms", s.fmt.PrefixInternal, name)), duration_ms, now)
-	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.target_type_is_rate.unit_is_Metricps", s.fmt.PrefixInternal, name)), float64(num)/float64(s.flushInterval), now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.mtype_is_gauge.type_is_calculation.unit_is_ms", s.fmt.PrefixInternal, name)), duration_ms, now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.mtype_is_rate.unit_is_Metricps", s.fmt.PrefixInternal, name)), float64(num)/float64(s.flushInterval), now)
 	return buf, num
 }
 
@@ -262,7 +262,7 @@ func (s *StatsDaemon) graphiteWriter() {
 			}
 		}
 		buf = buf[:0]
-		buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%starget_type_is_gauge.type_is_send.unit_is_ms", s.fmt.PrefixInternal)), duration, pre.Unix())
+		buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%smtype_is_gauge.type_is_send.unit_is_ms", s.fmt.PrefixInternal)), duration, pre.Unix())
 		ok = false
 		for !ok {
 			lock.Lock()
@@ -273,7 +273,7 @@ func (s *StatsDaemon) graphiteWriter() {
 					log.Println("DEBUG: wrote sendtime to graphite!")
 				}
 			} else {
-				log.Printf("failed to write target_type_is_gauge.type_is_send.unit_is_ms: %s. will retry...", err)
+				log.Printf("failed to write mtype_is_gauge.type_is_send.unit_is_ms: %s. will retry...", err)
 				conn.Close()
 				conn = nil
 				haveConn = false

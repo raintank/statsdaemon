@@ -83,7 +83,7 @@
           "targets": [
             {
               "refId": "A",
-              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.direction_is_in.*.target_type_is_rate.unit_is_Metricps, 3)",
+              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.direction_is_in.*.mtype_is_rate.unit_is_Metricps, 3)",
               "textEditor": false
             }
           ],
@@ -164,7 +164,7 @@
           "targets": [
             {
               "refId": "A",
-              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.direction_is_out.*.target_type_is_rate.unit_is_Metricps, 3)",
+              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.direction_is_out.*.mtype_is_rate.unit_is_Metricps, 3)",
               "textEditor": false
             }
           ],
@@ -257,7 +257,7 @@
           "targets": [
             {
               "refId": "A",
-              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.statsd_type_is_*.target_type_is_gauge.type_is_calculation.unit_is_ms, 2)"
+              "target": "aliasByNode(service_is_statsdaemon.instance_is_$instance.statsd_type_is_*.mtype_is_gauge.type_is_calculation.unit_is_ms, 2)"
             }
           ],
           "timeFrom": null,
@@ -332,11 +332,11 @@
           "targets": [
             {
               "refId": "A",
-              "target": "alias(consolidateBy(service_is_statsdaemon.instance_is_$instance.target_type_is_gauge.type_is_send.unit_is_ms, 'max'), 'max')"
+              "target": "alias(consolidateBy(service_is_statsdaemon.instance_is_$instance.mtype_is_gauge.type_is_send.unit_is_ms, 'max'), 'max')"
             },
             {
               "refId": "B",
-              "target": "alias(consolidateBy(service_is_statsdaemon.instance_is_$instance.target_type_is_gauge.type_is_send.unit_is_ms, 'average'), 'avg')"
+              "target": "alias(consolidateBy(service_is_statsdaemon.instance_is_$instance.mtype_is_gauge.type_is_send.unit_is_ms, 'average'), 'avg')"
             }
           ],
           "timeFrom": null,

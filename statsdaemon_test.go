@@ -118,7 +118,7 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
-	errors_key := "internal.target_type_is_count.type_is_invalid_line.unit_is_Err"
+	errors_key := "internal.mtype_is_count.type_is_invalid_line.unit_is_Err"
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
 	packets = udp.ParseMessage(d, formatM1Legacy.PrefixInternal, output, udp.ParseLine)
 	assert.Equal(t, len(packets), 2)
@@ -260,7 +260,7 @@ func TestUpperPercentile(t *testing.T) {
 }
 
 func TestMetrics20Timer(t *testing.T) {
-	d := []byte("foo=bar.target_type=gauge.unit=ms:5|ms\nfoo=bar.target_type=gauge.unit=ms:10|ms")
+	d := []byte("foo=bar.mtype=gauge.unit=ms:5|ms\nfoo=bar.mtype=gauge.unit=ms:10|ms")
 	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
 	pct, _ := out.NewPercentiles("75")
@@ -275,21 +275,21 @@ func TestMetrics20Timer(t *testing.T) {
 	assert.Equal(t, int(num), 1)
 
 	dataForGraphite := string(buf)
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max_75 10"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean_75 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum_75 15"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=mean 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=median 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=std 2.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=sum 15"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=max 10"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=gauge.unit=ms.stat=min 5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.target_type=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.2"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=max_75 10"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=mean_75 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=sum_75 15"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=mean 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=median 7.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=std 2.5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=sum 15"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=max 10"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=min 5"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
+	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.2"))
 }
 
 func TestMetrics20Count(t *testing.T) {
-	d := []byte("foo=bar.target_type=count.unit=B:5|c\nfoo=bar.target_type=count.unit=B:10|c")
+	d := []byte("foo=bar.mtype=count.unit=B:5|c\nfoo=bar.mtype=count.unit=B:10|c")
 	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
 
 	c := out.NewCounters(true, false)
@@ -302,7 +302,7 @@ func TestMetrics20Count(t *testing.T) {
 	buf, n := c.Process(buf, time.Now().Unix(), 10, formatM20)
 	num += n
 
-	assert.T(t, strings.Contains(string(buf), "foo=bar.target_type=rate.unit=Bps 1.5"))
+	assert.T(t, strings.Contains(string(buf), "foo=bar.mtype=rate.unit=Bps 1.5"))
 }
 
 func TestLowerPercentile(t *testing.T) {
@@ -424,7 +424,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	totalLock := sync.Mutex{}
 	daemon.submitFunc = func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 		totalLock.Lock()
-		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.target_type_is_count.unit_is_Metric"]
+		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.mtype_is_count.unit_is_Metric"]
 		totalLock.Unlock()
 	}
 	go daemon.RunBare()
