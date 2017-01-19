@@ -136,7 +136,7 @@ func processTimer(ti *out.Timers, input string, f out.Formatter) (string, int64)
 	for _, p := range packets {
 		ti.Add(p)
 	}
-	buf, num := ti.Process(nil, time.Now().Unix(), 60, f)
+	buf, num := ti.Process(nil, time.Now().Unix(), 10, f)
 	return string(buf), num
 }
 
@@ -172,24 +172,29 @@ func TestTimerM1(t *testing.T) {
 }
 
 func TestTimerM20(t *testing.T) {
-	got, num := processTimer(out.NewTimers(out.Percentiles{}), "direction=out.unit=ms.mtype=gauge:0|ms\ndirection=out.unit=ms.mtype=gauge:30|ms\ndirection=out.unit=ms.mtype=gauge:30|ms", formatM20)
+	pct, _ := out.NewPercentiles("75")
+	got, num := processTimer(out.NewTimers(*pct), "direction=out.unit=ms.mtype=gauge:0|ms\ndirection=out.unit=ms.mtype=gauge:30|ms\ndirection=out.unit=ms.mtype=gauge:30|ms", formatM20)
 	assert.Equal(t, num, int64(1))
-	exp := "timers-2.direction=out.unit=ms.mtype=gauge.stat=mean 20 "
-	if !strings.Contains(got, exp) {
-		t.Fatalf("output %q does not contain %q", got, exp)
+	exps := []string{
+
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=mean 20 ",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=sum 60 ",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=min 0 ",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=max 30 ",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=max_75 30",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=mean_75 15",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=median 30",
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=std 14.142135623730951", // sqrt((20^2 + 10^2 + 10^2)/3)
+		"timers-2.direction=out.unit=ms.mtype=gauge.stat=sum 60",
+		"timers-2.direction=out.unit=Pckt.mtype=count.orig_unit=ms.pckt_type=sent.direction=in 3",
+		"timers-2.direction=out.unit=Pcktps.mtype=rate.orig_unit=ms.pckt_type=sent.direction=in 0.3",
 	}
-	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=sum 60 "
-	if !strings.Contains(got, exp) {
-		t.Fatalf("output %q does not contain %q", got, exp)
+	for _, exp := range exps {
+		if !strings.Contains(got, exp) {
+			t.Fatalf("output %q does not contain %q", got, exp)
+		}
 	}
-	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=min 0 "
-	if !strings.Contains(got, exp) {
-		t.Fatalf("output %q does not contain %q", got, exp)
-	}
-	exp = "timers-2.direction=out.unit=ms.mtype=gauge.stat=max 30 "
-	if !strings.Contains(got, exp) {
-		t.Fatalf("output %q does not contain %q", got, exp)
-	}
+
 }
 
 func TestTimerM20NE(t *testing.T) {
@@ -252,40 +257,11 @@ func TestUpperPercentile(t *testing.T) {
 	buf, num := ti.Process(buf, time.Now().Unix(), 60, formatM1Legacy)
 	assert.Equal(t, num, int64(1))
 
-	exp := "time.upper_75 2 "
+	exp := "stats.timers.time.upper_75 2 "
 	got := string(buf)
 	if !strings.Contains(got, exp) {
 		t.Fatalf("output %q does not contain %q", got, exp)
 	}
-}
-
-func TestMetrics20Timer(t *testing.T) {
-	d := []byte("foo=bar.mtype=gauge.unit=ms:5|ms\nfoo=bar.mtype=gauge.unit=ms:10|ms")
-	packets := udp.ParseMessage(d, "", output, udp.ParseLine)
-
-	pct, _ := out.NewPercentiles("75")
-	ti := out.NewTimers(*pct)
-
-	for _, p := range packets {
-		ti.Add(p)
-	}
-
-	var buf []byte
-	buf, num := ti.Process(buf, time.Now().Unix(), 10, formatM1Legacy)
-	assert.Equal(t, int(num), 1)
-
-	dataForGraphite := string(buf)
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=max_75 10"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=mean_75 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=sum_75 15"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=mean 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=median 7.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=std 2.5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=sum 15"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=max 10"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=gauge.unit=ms.stat=min 5"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=count.unit=Pckt.orig_unit=ms.pckt_type=sent.direction=in 2"))
-	assert.T(t, strings.Contains(dataForGraphite, "foo=bar.mtype=rate.unit=Pcktps.orig_unit=ms.pckt_type=sent.direction=in 0.2"))
 }
 
 func TestMetrics20Count(t *testing.T) {
