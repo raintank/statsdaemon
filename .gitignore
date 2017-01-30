@@ -1,4 +1,4 @@
-cmd/statsdaemon
+cmd/statsdaemon/statsdaemon
 tester/tester
 *.test
 */*.test
