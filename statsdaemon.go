@@ -190,8 +190,8 @@ func (s *StatsDaemon) instrument(st out.Type, buf []byte, now int64, name string
 	buf, num := st.Process(buf, now, s.flushInterval, s.fmt)
 	time_end := s.Clock.Now()
 	duration_ms := float64(time_end.Sub(time_start).Nanoseconds()) / float64(1000000)
-	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sstatsd_type_is_%s.mtype_is_gauge.type_is_calculation.unit_is_ms", s.fmt.PrefixInternal, name)), duration_ms, now)
-	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%sdirection_is_out.statsd_type_is_%s.mtype_is_rate.unit_is_Metricps", s.fmt.PrefixInternal, name)), float64(num)/float64(s.flushInterval), now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%s%sstatsd_type_is_%s.mtype_is_gauge.type_is_calculation.unit_is_ms", s.fmt.Prefix_m20ne_gauges, s.fmt.PrefixInternal, name)), duration_ms, now)
+	buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%s%sdirection_is_out.statsd_type_is_%s.mtype_is_rate.unit_is_Metricps", s.fmt.Prefix_m20ne_rates, s.fmt.PrefixInternal, name)), float64(num)/float64(s.flushInterval), now)
 	return buf, num
 }
 
@@ -262,7 +262,7 @@ func (s *StatsDaemon) graphiteWriter() {
 			}
 		}
 		buf = buf[:0]
-		buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%smtype_is_gauge.type_is_send.unit_is_ms", s.fmt.PrefixInternal)), duration, pre.Unix())
+		buf = out.WriteFloat64(buf, []byte(fmt.Sprintf("%s%smtype_is_gauge.type_is_send.unit_is_ms", s.fmt.Prefix_m20ne_gauges, s.fmt.PrefixInternal)), duration, pre.Unix())
 		ok = false
 		for !ok {
 			lock.Lock()
