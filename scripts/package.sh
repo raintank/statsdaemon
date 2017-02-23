@@ -6,6 +6,7 @@ CODE_DIR=$(readlink -e "$BASE/../")
 sudo apt-get install rpm # to be able to make rpms
 
 BUILD_ROOT=$CODE_DIR/build
+URL='https://github.com/raintank/statsdaemon'
 
 ARCH="$(uname -m)"
 VERSION=$(git describe --long --always)
@@ -71,7 +72,7 @@ cp ${BASE}/config/systemd/statsdaemon.service $BUILD/lib/systemd/system/
 PACKAGE_NAME="${BUILD}/statsdaemon-${VERSION}.el7.${ARCH}.rpm"
 fpm -s dir -t rpm \
   -v ${VERSION} -n statsdaemon -a ${ARCH} --description "Metrics aggregation daemon like statsd, in Go." \
-  --license "Apache2.0" -C ${BUILD} -p ${PACKAGE_NAME} .
+  --config-files etc/statsdaemon.ini --url ${URL} --license "Apache2.0" -C ${BUILD} -p ${PACKAGE_NAME} .
 
 ## CentOS 6
 BUILD=${BUILD_ROOT}/upstart-0.6.5
@@ -87,5 +88,5 @@ cp ${BASE}/config/upstart-0.6.5/statsdaemon.conf $BUILD/etc/init
 PACKAGE_NAME="${BUILD}/statsdaemon-${VERSION}.el6.${ARCH}.rpm"
 fpm -s dir -t rpm \
   -v ${VERSION} -n statsdaemon -a ${ARCH} --description "Metrics aggregation daemon like statsd, in Go." \
-  -C ${BUILD} -p ${PACKAGE_NAME} .
+  -C ${BUILD} --url ${URL} --config-files etc/statsdaemon.ini -p ${PACKAGE_NAME} .
 
