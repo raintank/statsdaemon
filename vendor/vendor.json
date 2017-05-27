@@ -103,13 +103,7 @@
 			"path": "github.com/tv42/topic",
 			"revision": "aa72cbe81b4823f349da47a4d749cdda61677c09",
 			"revisionTime": "2013-07-29T20:18:30Z"
-		},
-		{
-			"checksumSHA1": "kwZn/TNKc3VzadRTFiSkVRX+bTs=",
-			"path": "github.com/rakyll/globalconf",
-			"revision": "415abc325023f1a00cd2d9fa512e0e71745791a2",
-			"revisionTime": "2014-08-18T21:38:18Z"
-                }
+		}
 	],
 	"rootPath": "github.com/raintank/statsdaemon"
 }

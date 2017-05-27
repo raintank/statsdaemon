@@ -20,7 +20,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/rakyll/globalconf"
+	"github.com/grafana/globalconf"
 )
 
 const (
