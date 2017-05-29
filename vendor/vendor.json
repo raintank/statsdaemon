@@ -51,12 +51,6 @@
 			"revisionTime": "2016-01-24T19:35:03Z"
 		},
 		{
-			"checksumSHA1": "bM0KEShwScin9ADEYWUrkkF27Zk=",
-			"path": "github.com/pelletier/go-toml",
-			"revision": "a1f048ba24490f9b0674a67e1ce995d685cddf4a",
-			"revisionTime": "2017-01-16T02:49:11Z"
-		},
-		{
 			"checksumSHA1": "6B/7widWpxa60dqiH3Eh9qZGQhY=",
 			"path": "github.com/raintank/dur",
 			"revision": "7b06fb4cf9324a785c2dedea9aa4e47769d54b92",
