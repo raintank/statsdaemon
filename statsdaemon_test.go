@@ -400,7 +400,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 	totalLock := sync.Mutex{}
 	daemon.submitFunc = func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 		totalLock.Lock()
-		total += c.Values["service_is_statsdaemon.instance_is_test.direction_is_in.statsd_type_is_counter.mtype_is_count.unit_is_Metric"]
+		total += c.Values["internal.direction_is_in.statsd_type_is_counter.mtype_is_count.unit_is_Metric"]
 		totalLock.Unlock()
 	}
 	go daemon.RunBare()
