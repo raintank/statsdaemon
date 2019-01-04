@@ -23,4 +23,12 @@ mkdir -p ${GOPATH}/src/${ORG_PATH}
 ln -s ${CHECKOUT} ${GOPATH}/src/${REPO_PATH}
 
 cd ${GOPATH}/src/${REPO_PATH}
-go get -t ./...
+set -e
+
+# checks whether vendor directory is healthy
+
+go get -u github.com/golang/dep/cmd/dep
+
+dep version
+dep status
+dep check
