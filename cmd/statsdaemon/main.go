@@ -37,9 +37,9 @@ var (
 	admin_addr      = config.String("admin_addr", ":8126")
 	profile_addr    = config.String("profile_addr", "")
 	graphite_addr   = config.String("graphite_addr", "127.0.0.1:2003")
-	flushInterval   = config.Int("flush_interval", 10)
-	processes       = config.Int("processes", 1)
-	instance        = config.String("instance", "null")
+	flushInterval   = config.Int("flush_interval", 60)
+	processes       = config.Int("processes", 4)
+	instance        = config.String("instance", "${HOST}")
 	prefix_counters = config.String("prefix_counters", "stats_counts.")
 	prefix_gauges   = config.String("prefix_gauges", "stats.gauges.")
 	prefix_rates    = config.String("prefix_rates", "stats.")
@@ -54,16 +54,16 @@ var (
 	flush_rates      = config.Bool("flush_rates", true)
 	flush_counts     = config.Bool("flush_counts", false)
 
-	percentile_thresholds = config.String("percentile_thresholds", "")
+	percentile_thresholds = config.String("percentile_thresholds", "90,75")
 	max_timers_per_s      = config.Uint64("max_timers_per_s", 1000)
 
-	proftrigPath = config.String("proftrigger_path", "/tmp") // "path to store triggered profiles"
+	proftrigPath = config.String("proftrigger_path", "/tmp/profiletrigger") // "path to store triggered profiles"
 
-	proftrigHeapFreqStr    = config.String("proftrigger_heap_freq", "60s")    // "inspect status frequency. set to 0 to disable"
+	proftrigHeapFreqStr    = config.String("proftrigger_heap_freq", "0")    // "inspect status frequency. set to 0 to disable"
 	proftrigHeapMinDiffStr = config.String("proftrigger_heap_min_diff", "1h") // "minimum time between triggered profiles"
 	proftrigHeapThresh     = config.Int("proftrigger_heap_thresh", 10000000)  // "if this many bytes allocated, trigger a profile"
 
-	proftrigCpuFreqStr    = config.String("proftrigger_cpu_freq", "60s")    // "inspect status frequency. set to 0 to disable"
+	proftrigCpuFreqStr    = config.String("proftrigger_cpu_freq", "0")    // "inspect status frequency. set to 0 to disable"
 	proftrigCpuMinDiffStr = config.String("proftrigger_cpu_min_diff", "1h") // "minimum time between triggered profiles"
 	proftrigCpuDurStr     = config.String("proftrigger_cpu_dur", "5s")      // "duration of cpu profile"
 	proftrigCpuThresh     = config.Int("proftrigger_cpu_thresh", 80)        // "if this much percent cpu used, trigger a profile"
