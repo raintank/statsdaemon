@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -13,9 +12,11 @@ import (
 
 	"github.com/Dieterbe/profiletrigger/cpu"
 	"github.com/Dieterbe/profiletrigger/heap"
+	"github.com/grafana/metrictank/logger"
 	"github.com/raintank/dur"
 	"github.com/raintank/statsdaemon"
 	"github.com/raintank/statsdaemon/out"
+	log "github.com/sirupsen/logrus"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -68,7 +69,7 @@ var (
 	proftrigCpuDurStr     = flag.String("proftrigger_cpu_dur", "5s", "profiler cpu duration")      // "duration of cpu profile"
 	proftrigCpuThresh     = flag.Int("proftrigger_cpu_thresh", 80, "profiler cpu threshold")        // "if this much percent cpu used, trigger a profile"
 
-	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
+	logLevel    = flag.String("log_level", "info", "log level. panic|fatal|error|warning|info|debug")
 	showVersion = flag.Bool("version", false, "print version string")
 	config_file = flag.String("config_file", "/etc/statsdaemon.ini", "config file location")
 	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
@@ -122,7 +123,22 @@ func main() {
 
 	conf.ParseAll()
 
+	/***********************************
+	          Set up Logger
+    ***********************************/
 
+	logformatter := &logger.TextFormatter{}
+	logformatter.TimestampFormat = "2006-01-02 15:04:05.000"
+	log.SetFormatter(logformatter)
+	lvl, err := log.ParseLevel(*logLevel)
+	if err != nil {
+		log.Fatalf("failed to parse log-level, %s", err.Error())
+	}
+	log.SetLevel(lvl)
+	log.Infof("logging level set to '%s'", *logLevel)
+
+
+	// TODO: update dur, these functions are deprecated
 	proftrigHeapFreq := dur.MustParseUsec("proftrigger_heap_freq", *proftrigHeapFreqStr)
 	proftrigHeapMinDiff := int(dur.MustParseUNsec("proftrigger_heap_min_diff", *proftrigHeapMinDiffStr))
 
@@ -132,10 +148,11 @@ func main() {
 
 	if proftrigHeapFreq > 0 {
 		errors := make(chan error)
+		// TODO: update to latest profile trigger
 		trigger, _ := heap.New(*proftrigPath, *proftrigHeapThresh, proftrigHeapMinDiff, time.Duration(proftrigHeapFreq)*time.Second, errors)
 		go func() {
 			for e := range errors {
-				log.Printf("profiletrigger heap: %s", e)
+				log.Errorf("profiletrigger heap: %s", e)
 			}
 		}()
 		go trigger.Run()
@@ -148,7 +165,7 @@ func main() {
 		trigger, _ := cpu.New(*proftrigPath, *proftrigCpuThresh, proftrigCpuMinDiff, freq, duration, errors)
 		go func() {
 			for e := range errors {
-				log.Printf("profiletrigger cpu: %s", e)
+				log.Errorf("profiletrigger cpu: %s", e)
 			}
 		}()
 		go trigger.Run()
@@ -168,8 +185,8 @@ func main() {
 	signal.Notify(signalchan)
 	if *profile_addr != "" {
 		go func() {
-			fmt.Println("Profiling endpoint listening on " + *profile_addr)
-			log.Println(http.ListenAndServe(*profile_addr, nil))
+			log.Info("Profiling endpoint listening on " + *profile_addr)
+			log.Info(http.ListenAndServe(*profile_addr, nil))
 		}()
 	}
 
@@ -193,13 +210,13 @@ func main() {
 		Prefix_m20ne_timers:   strings.Replace(*prefix_m20_timers, "=", "_is_", -1),
 	}
 
-	daemon := statsdaemon.New(inst, formatter, *flush_rates, *flush_counts, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, *debug, signalchan)
-	if *debug {
+	daemon := statsdaemon.New(inst, formatter, *flush_rates, *flush_counts, *pct, *flushInterval, MAX_UNPROCESSED_PACKETS, *max_timers_per_s, signalchan)
+	if *logLevel == "debug" {
 		consumer := make(chan interface{}, 100)
 		daemon.Invalid_lines.Register(consumer)
 		go func() {
 			for line := range consumer {
-				log.Printf("invalid line '%s'\n", line)
+				log.Debugf("invalid line '%s'\n", line)
 			}
 		}()
 	}

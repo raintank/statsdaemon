@@ -394,7 +394,7 @@ func BenchmarkSameTimersAddAndProcess(b *testing.B) {
 }
 
 func BenchmarkIncomingMetrics(b *testing.B) {
-	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, false, nil)
+	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, nil)
 	daemon.Clock = clock.NewMock()
 	total := float64(0)
 	totalLock := sync.Mutex{}
@@ -437,7 +437,7 @@ func BenchmarkIncomingMetrics(b *testing.B) {
 }
 
 func BenchmarkIncomingMetricAmounts(b *testing.B) {
-	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, false, nil)
+	daemon := New("test", formatM1Legacy, false, false, out.Percentiles{}, 10, 1000, 1000, nil)
 	daemon.Clock = clock.NewMock()
 	daemon.submitFunc = func(c *out.Counters, g *out.Gauges, t *out.Timers, deadline time.Time) {
 	}
