@@ -10,7 +10,6 @@ package topic
 
 import (
 	"sync"
-    "fmt"
 )
 
 type nothing struct{}
@@ -47,7 +46,6 @@ func (t *Topic) run(broadcast <-chan interface{}) {
 				select {
 				case ch <- msg:
 				default:
-                    fmt.Println("deleting", ch)
 					delete(t.connections, ch)
 					close(ch)
 				}

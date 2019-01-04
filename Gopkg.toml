@@ -1,0 +1,68 @@
+# Gopkg.toml example
+#
+# Refer to https://golang.github.io/dep/docs/Gopkg.toml.html
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#   name = "github.com/x/y"
+#   version = "2.4.0"
+#
+# [prune]
+#   non-go = false
+#   go-tests = true
+#   unused-packages = true
+
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/benbjohnson/clock"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/bmizerany/assert"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/grafana/globalconf"
+
+[[constraint]]
+  name = "github.com/grafana/metrictank"
+  version = "0.11.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/metrics20/go-metrics20"
+
+[[constraint]]
+  name = "github.com/raintank/dur"
+  revision = "7b06fb4cf9324a785c2dedea9aa4e47769d54b92"
+
+[[constraint]]
+  name = "github.com/Dieterbe/profiletrigger"
+  revision = "e8a1450fbba791216851396713af6612d8ababd7"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/tv42/topic"
+
+[[constraint]]
+  name = "github.com/sirupsen/logrus"
+  # carbon-relay-ng needs this version. and tsdbgw includes both metrictank and carbon-relay-ng
+  revision = "08e90462da344fbb3880e8e47a0ddacc37508579"
+
+[prune]
+  go-tests = true
+  non-go = true
+  unused-packages = true

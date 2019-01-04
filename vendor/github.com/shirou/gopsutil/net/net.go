@@ -1,6 +1,7 @@
 package net
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,22 +12,21 @@ import (
 	"github.com/shirou/gopsutil/internal/common"
 )
 
-var invoke common.Invoker
-
-func init() {
-	invoke = common.Invoke{}
-}
+var invoke common.Invoker = common.Invoke{}
 
 type IOCountersStat struct {
-	Name        string `json:"name"`         // interface name
+	Name        string `json:"name"`        // interface name
 	BytesSent   uint64 `json:"bytesSent"`   // number of bytes sent
 	BytesRecv   uint64 `json:"bytesRecv"`   // number of bytes received
 	PacketsSent uint64 `json:"packetsSent"` // number of packets sent
 	PacketsRecv uint64 `json:"packetsRecv"` // number of packets received
-	Errin       uint64 `json:"errin"`        // total number of errors while receiving
-	Errout      uint64 `json:"errout"`       // total number of errors while sending
-	Dropin      uint64 `json:"dropin"`       // total number of incoming packets which were dropped
-	Dropout     uint64 `json:"dropout"`      // total number of outgoing packets which were dropped (always 0 on OSX and BSD)
+	Errin       uint64 `json:"errin"`       // total number of errors while receiving
+	Errout      uint64 `json:"errout"`      // total number of errors while sending
+	Dropin      uint64 `json:"dropin"`      // total number of incoming packets which were dropped
+	Dropout     uint64 `json:"dropout"`     // total number of outgoing packets which were dropped (always 0 on OSX and BSD)
+	Fifoin      uint64 `json:"fifoin"`      // total number of FIFO buffers errors while receiving
+	Fifoout     uint64 `json:"fifoout"`     // total number of FIFO buffers errors while sending
+
 }
 
 // Addr is implemented compatibility to psutil
@@ -36,13 +36,14 @@ type Addr struct {
 }
 
 type ConnectionStat struct {
-	Fd     uint32 `json:"fd"`
-	Family uint32 `json:"family"`
-	Type   uint32 `json:"type"`
-	Laddr  Addr   `json:"localaddr"`
-	Raddr  Addr   `json:"remoteaddr"`
-	Status string `json:"status"`
-	Pid    int32  `json:"pid"`
+	Fd     uint32  `json:"fd"`
+	Family uint32  `json:"family"`
+	Type   uint32  `json:"type"`
+	Laddr  Addr    `json:"localaddr"`
+	Raddr  Addr    `json:"remoteaddr"`
+	Status string  `json:"status"`
+	Uids   []int32 `json:"uids"`
+	Pid    int32   `json:"pid"`
 }
 
 // System wide stats about different network protocols
@@ -70,6 +71,7 @@ type FilterStat struct {
 }
 
 var constMap = map[string]int{
+	"unix": syscall.AF_UNIX,
 	"TCP":  syscall.SOCK_STREAM,
 	"UDP":  syscall.SOCK_DGRAM,
 	"IPv4": syscall.AF_INET,
@@ -107,6 +109,10 @@ func (n InterfaceAddr) String() string {
 }
 
 func Interfaces() ([]InterfaceStat, error) {
+	return InterfacesWithContext(context.Background())
+}
+
+func InterfacesWithContext(ctx context.Context) ([]InterfaceStat, error) {
 	is, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -173,8 +179,13 @@ func getIOCountersAll(n []IOCountersStat) ([]IOCountersStat, error) {
 
 func parseNetLine(line string) (ConnectionStat, error) {
 	f := strings.Fields(line)
-	if len(f) < 9 {
+	if len(f) < 8 {
 		return ConnectionStat{}, fmt.Errorf("wrong line,%s", line)
+	}
+
+	if len(f) == 8 {
+		f = append(f, f[7])
+		f[7] = "unix"
 	}
 
 	pid, err := strconv.Atoi(f[1])
@@ -194,9 +205,14 @@ func parseNetLine(line string) (ConnectionStat, error) {
 		return ConnectionStat{}, fmt.Errorf("unknown type, %s", f[7])
 	}
 
-	laddr, raddr, err := parseNetAddr(f[8])
-	if err != nil {
-		return ConnectionStat{}, fmt.Errorf("failed to parse netaddr, %s", f[8])
+	var laddr, raddr Addr
+	if f[7] == "unix" {
+		laddr.IP = f[8]
+	} else {
+		laddr, raddr, err = parseNetAddr(f[8])
+		if err != nil {
+			return ConnectionStat{}, fmt.Errorf("failed to parse netaddr, %s", f[8])
+		}
 	}
 
 	n := ConnectionStat{
