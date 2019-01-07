@@ -33,40 +33,42 @@ const (
 )
 
 var (
-	listen_addr     = flag.String("listen_addr", ":8125", "listener address for statsd, listens on UDP only")
-	admin_addr      = flag.String("admin_addr", ":8126", "listener address for admin port")
-	profile_addr    = flag.String("profile_addr", "", "listener address for profiler")
-	graphite_addr   = flag.String("graphite_addr", "127.0.0.1:2003", "graphite carbon-in url")
-	flushInterval   = flag.Int("flush_interval", 10, "flush interval in seconds")
-	processes       = flag.Int("processes", 1, "number of processes to use")
-	instance        = flag.String("instance", "$HOST", "instance name, defaults to short hostname if not set")
-	prefix_counters = flag.String("prefix_counters", "stats_counts.", "counters prefix")
-	prefix_gauges   = flag.String("prefix_gauges", "stats.gauges.", "gauges prefix")
-	prefix_rates    = flag.String("prefix_rates", "stats.", "rates prefix, it is recommended that you use stats.rates if possible")
-	prefix_timers   = flag.String("prefix_timers", "stats.timers.", "timers prefix")
+	listen_addr   = flag.String("listen_addr", ":8125", "listener address for statsd, listens on UDP only")
+	admin_addr    = flag.String("admin_addr", ":8126", "listener address for admin port")
+	profile_addr  = flag.String("profile_addr", "", "listener address for profiler")
+	graphite_addr = flag.String("graphite_addr", "127.0.0.1:2003", "graphite carbon-in url")
+	flushInterval = flag.Int("flush_interval", 10, "flush interval in seconds")
+	processes     = flag.Int("processes", 4, "number of processes to use")
+
+	instance = flag.String("instance", "$HOST", "instance name, defaults to short hostname if not set")
+
+	legacy_namespace = flag.Bool("legacy_namespace", true, "legacy namespacing (not recommended)")
+	prefix_rates     = flag.String("prefix_rates", "stats.", "rates prefix, it is recommended that you use stats.rates if possible")
+	prefix_counters  = flag.String("prefix_counters", "stats_counts.", "counters prefix")
+	prefix_timers    = flag.String("prefix_timers", "stats.timers.", "timers prefix")
+	prefix_gauges    = flag.String("prefix_gauges", "stats.gauges.", "gauges prefix")
 
 	prefix_m20_counters = flag.String("prefix_m20_counters", "", "counters 2.0 prefix")
 	prefix_m20_gauges   = flag.String("prefix_m20_gauges", "", "gauges 2.0 prefix")
 	prefix_m20_rates    = flag.String("prefix_m20_rates", "", "rates 2.0 prefix")
 	prefix_m20_timers   = flag.String("prefix_m20_timers", "", "timers 2.0 prefix")
 
-	legacy_namespace = flag.Bool("legacy_namespace", true, "legacy namespacing (not recommended)")
-	flush_rates      = flag.Bool("flush_rates", true, "send count for counters (using prefix_counters)")
-	flush_counts     = flag.Bool("flush_counts", false, "send count for counters (using prefix_counters)")
+	flush_rates  = flag.Bool("flush_rates", true, "send count for counters (using prefix_counters)")
+	flush_counts = flag.Bool("flush_counts", false, "send count for counters (using prefix_counters)")
 
-	percentile_thresholds = flag.String("percentile_thresholds", "", "percential thresholds (used by timers)")
+	percentile_thresholds = flag.String("percentile_thresholds", "90,75", "percential thresholds (used by timers)")
 	max_timers_per_s      = flag.Uint64("max_timers_per_s", 1000, "max timers per second")
 
-	proftrigPath = flag.String("proftrigger_path", "/tmp", "profiler file path") // "path to store triggered profiles"
+	proftrigPath = flag.String("proftrigger_path", "/tmp/profiletrigger/", "profiler file path") // "path to store triggered profiles"
 
-	proftrigHeapFreqStr    = flag.String("proftrigger_heap_freq", "60s", "profiler heap frequency")   // "inspect status frequency. set to 0 to disable"
+	proftrigHeapFreqStr    = flag.String("proftrigger_heap_freq", "0", "profiler heap frequency")           // "inspect status frequency. set to 0 to disable"
 	proftrigHeapMinDiffStr = flag.String("proftrigger_heap_min_diff", "1h", "profiler heap min difference") // "minimum time between triggered profiles"
-	proftrigHeapThresh     = flag.Int("proftrigger_heap_thresh", 10000000, "profiler heap threshold")  // "if this many bytes allocated, trigger a profile"
+	proftrigHeapThresh     = flag.Int("proftrigger_heap_thresh", 10000000, "profiler heap threshold")       // "if this many bytes allocated, trigger a profile"
 
-	proftrigCpuFreqStr    = flag.String("proftrigger_cpu_freq", "60s", "profiler cpu frequency")    // "inspect status frequency. set to 0 to disable"
+	proftrigCpuFreqStr    = flag.String("proftrigger_cpu_freq", "0", "profiler cpu frequency")           // "inspect status frequency. set to 0 to disable"
 	proftrigCpuMinDiffStr = flag.String("proftrigger_cpu_min_diff", "1h", "profiler cpu min difference") // "minimum time between triggered profiles"
-	proftrigCpuDurStr     = flag.String("proftrigger_cpu_dur", "5s", "profiler cpu duration")      // "duration of cpu profile"
-	proftrigCpuThresh     = flag.Int("proftrigger_cpu_thresh", 80, "profiler cpu threshold")        // "if this much percent cpu used, trigger a profile"
+	proftrigCpuDurStr     = flag.String("proftrigger_cpu_dur", "5s", "profiler cpu duration")            // "duration of cpu profile"
+	proftrigCpuThresh     = flag.Int("proftrigger_cpu_thresh", 80, "profiler cpu threshold")             // "if this much percent cpu used, trigger a profile"
 
 	debug       = flag.Bool("debug", false, "log outgoing metrics, bad lines, and received admin commands")
 	showVersion = flag.Bool("version", false, "print version string")
@@ -114,14 +116,13 @@ func main() {
 	path := ""
 	if _, err := os.Stat(*config_file); err == nil {
 		path = *config_file
-        }
+	}
 	conf, err := globalconf.NewWithOptions(&globalconf.Options{
 		Filename:  path,
 		EnvPrefix: "SD_",
-        })
+	})
 
 	conf.ParseAll()
-
 
 	proftrigHeapFreq := dur.MustParseUsec("proftrigger_heap_freq", *proftrigHeapFreqStr)
 	proftrigHeapMinDiff := int(dur.MustParseUNsec("proftrigger_heap_min_diff", *proftrigHeapMinDiffStr))
