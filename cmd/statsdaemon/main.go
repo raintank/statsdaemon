@@ -139,7 +139,6 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("logging level set to '%s'", *logLevel)
 
-
 	// TODO: update dur, these functions are deprecated
 	proftrigHeapFreq := dur.MustParseUsec("proftrigger_heap_freq", *proftrigHeapFreqStr)
 	proftrigHeapMinDiff := int(dur.MustParseUNsec("proftrigger_heap_min_diff", *proftrigHeapMinDiffStr))
@@ -218,7 +217,7 @@ func main() {
 		daemon.Invalid_lines.Register(consumer)
 		go func() {
 			for line := range consumer {
-				log.Debugf("invalid line '%s'\n", line)
+				log.Debugf("invalid line '%s'", line)
 			}
 		}()
 	}

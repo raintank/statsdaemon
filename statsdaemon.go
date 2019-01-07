@@ -85,7 +85,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.admin_addr = admin_addr
 	s.graphite_addr = graphite_addr
 
-	log.Infof("statsdaemon instance '%s' starting\n", s.instance)
+	log.Infof("statsdaemon instance '%s' starting", s.instance)
 	output := &out.Output{
 		Metrics:       s.Metrics,
 		MetricAmounts: s.metricAmounts,
@@ -104,7 +104,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 // up to you to write to Metrics and metricAmounts channels, and set submitFunc, and set the clock
 
 func (s *StatsDaemon) RunBare() {
-	log.Infof("statsdaemon instance '%s' starting\n", s.instance)
+	log.Infof("statsdaemon instance '%s' starting", s.instance)
 	go s.metricStatsMonitor()
 	s.metricsMonitor()
 }
