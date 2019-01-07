@@ -63,14 +63,6 @@
   revision = "7a1aae0695d90c7ce662097c9589dfe1ae3c4f47"
 
 [[projects]]
-  digest = "1:ec03f7211ff537ab756c84922a74528b5216ccd2ff568f9d193a3896ff5617e9"
-  name = "github.com/grafana/metrictank"
-  packages = ["logger"]
-  pruneopts = "NUT"
-  revision = "e5cdcf00e32d6dce5b25de15800b5d4849b9ee0f"
-  version = "v0.11.0"
-
-[[projects]]
   digest = "1:4059c14e87a2de3a434430340521b5feece186c1469eff0834c29a63870de3ed"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
@@ -175,7 +167,6 @@
     "github.com/benbjohnson/clock",
     "github.com/bmizerany/assert",
     "github.com/grafana/globalconf",
-    "github.com/grafana/metrictank/logger",
     "github.com/metrics20/go-metrics20/carbon20",
     "github.com/raintank/dur",
     "github.com/sirupsen/logrus",

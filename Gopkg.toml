@@ -38,10 +38,6 @@
   name = "github.com/grafana/globalconf"
 
 [[constraint]]
-  name = "github.com/grafana/metrictank"
-  version = "0.11.0"
-
-[[constraint]]
   branch = "master"
   name = "github.com/metrics20/go-metrics20"
 

@@ -12,9 +12,9 @@ import (
 
 	"github.com/Dieterbe/profiletrigger/cpu"
 	"github.com/Dieterbe/profiletrigger/heap"
-	"github.com/grafana/metrictank/logger"
 	"github.com/raintank/dur"
 	"github.com/raintank/statsdaemon"
+	"github.com/raintank/statsdaemon/logger"
 	"github.com/raintank/statsdaemon/out"
 	log "github.com/sirupsen/logrus"
 
