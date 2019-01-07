@@ -13,7 +13,7 @@ test:
     - scripts/package.sh
 dependencies:
   override:
-    - scripts/depends.sh
+    - scripts/vendor_health.sh
     - scripts/build.sh
     - scripts/build_docker.sh
 general:

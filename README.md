@@ -104,7 +104,7 @@ go get github.com/raintank/statsdaemon/cmd/statsdaemon
 Building
 ========
 
-we use govendor to save the dependencies to the vendor directory.
+we use [dep](https://golang.github.io/dep/) to save the dependencies to the vendor directory.
 
 Command Line Options
 ====================

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/raintank/statsdaemon/out"
 	"github.com/raintank/statsdaemon/ticker"
 	"github.com/raintank/statsdaemon/udp"
+	log "github.com/sirupsen/logrus"
 	"github.com/tv42/topic"
 )
 
@@ -55,7 +55,7 @@ type StatsDaemon struct {
 	graphite_addr string
 }
 
-func New(instance string, formatter out.Formatter, flush_rates, flush_counts bool, pct out.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, debug bool, signalchan chan os.Signal) *StatsDaemon {
+func New(instance string, formatter out.Formatter, flush_rates, flush_counts bool, pct out.Percentiles, flushInterval, max_unprocessed int, max_timers_per_s uint64, signalchan chan os.Signal) *StatsDaemon {
 	return &StatsDaemon{
 		instance:            instance,
 		fmt:                 formatter,
@@ -65,7 +65,6 @@ func New(instance string, formatter out.Formatter, flush_rates, flush_counts boo
 		flushInterval:       flushInterval,
 		max_unprocessed:     max_unprocessed,
 		max_timers_per_s:    max_timers_per_s,
-		debug:               debug,
 		signalchan:          signalchan,
 		Metrics:             make(chan []*common.Metric, max_unprocessed),
 		metricAmounts:       make(chan []*common.Metric, max_unprocessed),
@@ -86,7 +85,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 	s.admin_addr = admin_addr
 	s.graphite_addr = graphite_addr
 
-	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
+	log.Infof("statsdaemon instance '%s' starting", s.instance)
 	output := &out.Output{
 		Metrics:       s.Metrics,
 		MetricAmounts: s.metricAmounts,
@@ -105,7 +104,7 @@ func (s *StatsDaemon) Run(listen_addr, admin_addr, graphite_addr string) {
 // up to you to write to Metrics and metricAmounts channels, and set submitFunc, and set the clock
 
 func (s *StatsDaemon) RunBare() {
-	log.Printf("statsdaemon instance '%s' starting\n", s.instance)
+	log.Infof("statsdaemon instance '%s' starting", s.instance)
 	go s.metricStatsMonitor()
 	s.metricsMonitor()
 }
@@ -208,9 +207,9 @@ func (s *StatsDaemon) graphiteWriter() {
 			if conn == nil {
 				conn, err = net.Dial("tcp", s.graphite_addr)
 				if err == nil {
-					log.Printf("now connected to %s", s.graphite_addr)
+					log.Infof("now connected to %s", s.graphite_addr)
 				} else {
-					log.Printf("WARN: dialing %s failed: %s. will retry", s.graphite_addr, err.Error())
+					log.Warnf("dialing %s failed: %s. will retry", s.graphite_addr, err.Error())
 				}
 			}
 			lock.Unlock()
@@ -226,12 +225,12 @@ func (s *StatsDaemon) graphiteWriter() {
 			haveConn = (conn != nil)
 			lock.Unlock()
 		}
-		if s.debug {
+		if log.IsLevelEnabled(log.DebugLevel) {
 			for _, line := range bytes.Split(buf, []byte("\n")) {
 				if len(line) == 0 {
 					continue
 				}
-				log.Printf("DEBUG: WRITING %s", line)
+				log.Debugf("writing %s", line)
 			}
 		}
 		ok := false
@@ -244,11 +243,9 @@ func (s *StatsDaemon) graphiteWriter() {
 			if err == nil {
 				ok = true
 				duration = float64(s.Clock.Now().Sub(pre).Nanoseconds()) / float64(1000000)
-				if s.debug {
-					log.Println("DEBUG: wrote metrics payload to graphite!")
-				}
+				log.Debug("wrote metrics payload to graphite!")
 			} else {
-				log.Printf("failed to write to graphite: %s (took %s). will retry...", err, s.Clock.Now().Sub(pre))
+				log.Errorf("failed to write to graphite: %s (took %s). will retry...", err, s.Clock.Now().Sub(pre))
 				conn.Close()
 				conn = nil
 				haveConn = false
@@ -269,11 +266,9 @@ func (s *StatsDaemon) graphiteWriter() {
 			_, err = conn.Write(buf)
 			if err == nil {
 				ok = true
-				if s.debug {
-					log.Println("DEBUG: wrote sendtime to graphite!")
-				}
+				log.Debug("wrote sendtime to graphite!")
 			} else {
-				log.Printf("failed to write mtype_is_gauge.type_is_send.unit_is_ms: %s. will retry...", err)
+				log.Errorf("failed to write mtype_is_gauge.type_is_send.unit_is_ms: %s. will retry...", err)
 				conn.Close()
 				conn = nil
 				haveConn = false
@@ -428,9 +423,7 @@ func (s *StatsDaemon) handleApiRequest(conn net.Conn, write_first []byte) {
 		}
 		clean_cmd := strings.TrimSpace(string(buf[:n]))
 		command := strings.Split(clean_cmd, " ")
-		if s.debug {
-			log.Println("DEBUG: [api] received command: '" + clean_cmd + "'")
-		}
+		log.Debug("[api] received command: '" + clean_cmd + "'")
 		switch command[0] {
 		case "sample_rate":
 			if len(command) != 2 {
@@ -490,7 +483,7 @@ func (s *StatsDaemon) adminListener() {
 		os.Exit(1)
 	}
 	defer l.Close()
-	fmt.Println("Listening on " + s.admin_addr)
+	log.Info("Listening on " + s.admin_addr)
 	for {
 		// Listen for an incoming connection.
 		conn, err := l.Accept()

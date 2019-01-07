@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/raintank/statsdaemon/common"
 	"github.com/raintank/statsdaemon/out"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"strconv"
 )
@@ -114,13 +114,13 @@ func Listener(listen_addr, prefix_internal string, output *out.Output, parse par
 		log.Fatalf("ERROR: ListenUDP - %s", err)
 	}
 	defer listener.Close()
-	log.Printf("listening on %s", address)
+	log.Infof("listening on %s", address)
 
 	message := make([]byte, MaxUdpPacketSize)
 	for {
 		n, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
-			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
+			log.Errorf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
 			continue
 		}
 		metrics := ParseMessage(message[:n], prefix_internal, output, parse)
